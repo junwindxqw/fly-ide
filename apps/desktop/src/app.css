@@ -1,0 +1,228 @@
+:root {
+  --bg-titlebar: #101418;
+  --bg-activity: #0d1117;
+  --bg-side: #131820;
+  --bg-editor: #0f141b;
+  --bg-status: #101418;
+  --bg-hover: #1b222c;
+  --bg-active: #223041;
+  --border: #232a33;
+  --text: #d7dee7;
+  --text-dim: #8b96a3;
+  --accent: #4f8cc9;
+
+  color: var(--text);
+  background-color: var(--bg-editor);
+  font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+/* ---------- 工作台布局 ---------- */
+
+.workbench {
+  display: grid;
+  height: 100%;
+  grid-template-areas:
+    "title   title   title"
+    "activity side   editor"
+    "status  status  status";
+  grid-template-rows: 34px 1fr 24px;
+  grid-template-columns: 48px 240px 1fr;
+}
+
+.titlebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-titlebar);
+  grid-area: title;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.titlebar .app-name {
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.titlebar .app-tag {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg-active);
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.activitybar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 6px;
+  gap: 2px;
+  border-right: 1px solid var(--border);
+  background: var(--bg-activity);
+  grid-area: activity;
+}
+
+.activitybar button {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.1;
+}
+
+.activitybar button:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.activitybar button[aria-pressed="true"] {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+.activitybar button[aria-pressed="true"]::before {
+  position: absolute;
+  top: 8px;
+  left: -4px;
+  width: 2px;
+  height: 24px;
+  border-radius: 2px;
+  background: var(--accent);
+  content: "";
+}
+
+.sidebar {
+  overflow: auto;
+  border-right: 1px solid var(--border);
+  background: var(--bg-side);
+  grid-area: side;
+}
+
+.sidebar .panel-title {
+  padding: 8px 12px;
+  color: var(--text-dim);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.sidebar .panel-body {
+  padding: 4px 12px 12px;
+  color: var(--text-dim);
+}
+
+.editor-area {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-editor);
+  grid-area: editor;
+}
+
+.editor-area .welcome {
+  padding: 24px 28px;
+  overflow: auto;
+}
+
+.editor-area h1 {
+  margin: 0 0 4px;
+  font-size: 20px;
+}
+
+.editor-area .sub {
+  margin: 0 0 20px;
+  color: var(--text-dim);
+}
+
+.card {
+  max-width: 560px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-side);
+}
+
+.card h2 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.card .row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.card button.primary {
+  padding: 5px 12px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+}
+
+.card button.primary:hover {
+  filter: brightness(1.1);
+}
+
+.card code,
+.card .mono {
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+}
+
+.card .hint {
+  margin: 8px 0 0;
+  color: var(--text-dim);
+}
+
+.card ul.marks {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--text-dim);
+}
+
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-status);
+  color: var(--text-dim);
+  font-size: 11px;
+  grid-area: status;
+}
+
+.statusbar .spacer {
+  flex: 1;
+}

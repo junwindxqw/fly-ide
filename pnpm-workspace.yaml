@@ -1,0 +1,12 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# pnpm 11 起设置移至 pnpm-workspace.yaml。
+# esbuild 的平台二进制通过 optionalDependencies 提供，不执行 postinstall 也可用（已验证），
+# 这里显式批准其安装脚本，避免 install 被警告中断。
+allowBuilds:
+  esbuild: true
+
+# 关闭脚本运行前的依赖状态校验（pnpm 11 默认行为会在 lockfile 变动时中断脚本）
+verifyDepsBeforeRun: false

@@ -18,12 +18,16 @@
 ## 开发
 
 ```bash
-pnpm install
-pnpm tauri dev        # 启动开发版
-pnpm check            # 前端类型检查
-cargo check --workspace
-cargo test --workspace
+pnpm install          # 安装依赖
+pnpm dev              # 启动开发版（Tauri dev）
+pnpm check            # 前端类型检查（svelte-check）
+pnpm build:web        # 仅构建前端
+pnpm check:rust       # cargo check --workspace --all-targets
+pnpm test             # cargo test --workspace
+pnpm clippy           # cargo clippy（-D warnings）
 ```
+
+仓库结构见 [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md) 3.13；性能基准脚本见 [scripts/bench](scripts/bench/README.md)；Phase 0 基线结果见 [docs/benchmarks/phase0-baseline.md](docs/benchmarks/phase0-baseline.md)。
 
 ## 许可证
 

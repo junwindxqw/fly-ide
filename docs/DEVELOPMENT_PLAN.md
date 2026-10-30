@@ -699,7 +699,9 @@ CM6 触发补全/跳转命令
 - 单实例 + Explorer「打开方式」/文件夹右键（P2）；
 - 终端：PowerShell 7 / Windows PowerShell / cmd / Git Bash / WSL 检测；
 - 安装：按用户安装到 `%LOCALAPPDATA%\Programs\FlyIDE`，无需管理员权限；
-- 签名：尽早采购代码签名证书，避免 SmartScreen 阻断发布。
+- 签名：尽早采购代码签名证书，避免 SmartScreen 阻断发布；
+- **开发期 devUrl 必须写 `http://127.0.0.1:1420` 而不是 `localhost`**：Windows 的 `localhost` 会同时解析到 `::1`，若机器上其他项目的 dev server 占用了 `[::1]:1420`，WebView2 会静默加载到别人的页面（Phase 0 已踩坑，表现为前端标记不出现、页面内容不是本项目）；
+- **Windows 上 `npm`/`pnpm` 的依赖安装脚本默认被拦截**：pnpm 11 起 `package.json` 的 `pnpm` 字段已失效，需在 `pnpm-workspace.yaml` 用 `allowBuilds` 批准（如 esbuild）。
 
 ### 3.13 仓库结构
 

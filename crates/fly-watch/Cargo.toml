@@ -1,0 +1,10 @@
+[package]
+name = "fly-watch"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+publish.workspace = true
+repository.workspace = true
+description = "文件监听封装：防抖、事件合并、自写事件过滤"
+
+[dependencies]

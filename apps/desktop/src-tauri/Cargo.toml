@@ -1,0 +1,29 @@
+[package]
+name = "fly-ide"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Fly IDE 桌面端（Tauri 壳与命令层）"
+publish.workspace = true
+repository.workspace = true
+
+# `_lib` 后缀用于避免与 bin 名称冲突（Windows 上的历史问题）
+[lib]
+name = "fly_ide_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { workspace = true }
+
+[dependencies]
+tauri = { workspace = true }
+tauri-plugin-opener = "2"
+serde = { workspace = true }
+serde_json = { workspace = true }
+fly-core = { path = "../../../crates/fly-core" }
+fly-fs = { path = "../../../crates/fly-fs" }
+fly-workspace = { path = "../../../crates/fly-workspace" }
+fly-watch = { path = "../../../crates/fly-watch" }
+fly-search = { path = "../../../crates/fly-search" }
+fly-git = { path = "../../../crates/fly-git" }
+fly-lsp-host = { path = "../../../crates/fly-lsp-host" }

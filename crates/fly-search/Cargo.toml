@@ -1,0 +1,10 @@
+[package]
+name = "fly-search"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+publish.workspace = true
+repository.workspace = true
+description = "项目搜索：ignore 遍历、grep 匹配、nucleo 模糊快速打开"
+
+[dependencies]

@@ -1,0 +1,10 @@
+[package]
+name = "fly-lsp-host"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+publish.workspace = true
+repository.workspace = true
+description = "语言服务器进程宿主：spawn、Content-Length 帧、stdio 转发、日志与重启"
+
+[dependencies]

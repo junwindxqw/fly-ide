@@ -1,0 +1,10 @@
+[package]
+name = "fly-git"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+publish.workspace = true
+repository.workspace = true
+description = "Git 集成：status/diff/log/blame 解析、patch 生成与应用（核心模块）"
+
+[dependencies]

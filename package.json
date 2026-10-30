@@ -1,0 +1,25 @@
+{
+  "name": "fly-ide",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Fly IDE 单体仓库：桌面 IDE（Tauri + Rust + Svelte）",
+  "scripts": {
+    "dev": "pnpm --filter @fly-ide/desktop tauri dev",
+    "build": "pnpm --filter @fly-ide/desktop tauri build",
+    "build:web": "pnpm --filter @fly-ide/desktop build",
+    "check": "pnpm --filter @fly-ide/desktop check",
+    "test": "cargo test --workspace",
+    "test:rust": "cargo test --workspace",
+    "check:rust": "cargo check --workspace --all-targets",
+    "bench:build": "cargo build --release -p fly-ide --features tauri/custom-protocol",
+    "bench": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bench/snapshot.ps1 -Exe target/release/fly-ide.exe",
+    "clippy": "cargo clippy --workspace --all-targets -- -D warnings",
+    "fmt": "cargo fmt --all",
+    "fmt:check": "cargo fmt --all -- --check"
+  },
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=11"
+  }
+}

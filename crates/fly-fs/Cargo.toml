@@ -1,0 +1,10 @@
+[package]
+name = "fly-fs"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+publish.workspace = true
+repository.workspace = true
+description = "文件读写、编码/行尾处理、原子保存、大文件分级"
+
+[dependencies]

@@ -1,0 +1,10 @@
+[package]
+name = "fly-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+publish.workspace = true
+repository.workspace = true
+description = "Fly IDE 核心领域模型与通用工具"
+
+[dependencies]

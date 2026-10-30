@@ -1,0 +1,10 @@
+[package]
+name = "fly-workspace"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+publish.workspace = true
+repository.workspace = true
+description = "工作区打开、文件树懒加载、最近项目、会话、文件索引"
+
+[dependencies]
