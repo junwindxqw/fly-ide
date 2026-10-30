@@ -17,17 +17,21 @@ void invoke("mark", { name: "ui.boot" }).catch((err) => {
   errors.push(`mark(ui.boot) 失败: ${String(err)}`);
 });
 
-const target = document.getElementById("app");
-if (!target) {
+function bootstrap(target: HTMLElement): ReturnType<typeof mount> | undefined {
+  try {
+    return mount(App, { target });
+  } catch (err) {
+    errors.push(`mount 失败: ${String(err)}`);
+    target.innerHTML = `<pre style="color:#ff8888;padding:16px;white-space:pre-wrap">挂载失败：${String(err)}</pre>`;
+    return undefined;
+  }
+}
+
+const element = document.getElementById("app");
+if (!element) {
   throw new Error("找不到 #app 挂载点");
 }
 
-let app: ReturnType<typeof mount>;
-try {
-  app = mount(App, { target });
-} catch (err) {
-  errors.push(`mount 失败: ${String(err)}`);
-  target.innerHTML = `<pre style="color:#ff8888;padding:16px;white-space:pre-wrap">挂载失败：${String(err)}</pre>`;
-}
+const app = bootstrap(element);
 
 export default app;
