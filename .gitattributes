@@ -1,0 +1,14 @@
+# 统一使用 LF 入库，避免 Windows 下 CRLF 混入（本项目自身也要处理 CRLF/LF，先从仓库自身做起）
+* text=auto eol=lf
+
+# 二进制资源
+*.png binary
+*.ico binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
