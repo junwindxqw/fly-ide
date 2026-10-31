@@ -489,3 +489,129 @@ button.git-row:hover,
 .diff-host .cm-deletedChunk {
   background: rgba(229, 83, 75, 0.15);
 }
+
+/* ---------- 文件树 ---------- */
+
+.tree-row {
+  display: flex;
+  align-items: center;
+}
+
+.tree-row:hover {
+  background: var(--bg-hover);
+}
+
+.tree-active {
+  background: var(--bg-active);
+}
+
+.tree-name {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+}
+
+.tree-caret {
+  flex: none;
+  width: 10px;
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.tree-ignored {
+  color: var(--text-dim);
+}
+
+/* ---------- 编辑器标签页 ---------- */
+
+.tabbar {
+  display: flex;
+  flex: none;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-titlebar);
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border-right: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tab:hover {
+  background: var(--bg-hover);
+}
+
+.tab-active {
+  background: var(--bg-editor);
+  color: var(--text);
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.tab-dirty {
+  color: var(--accent);
+  width: 8px;
+  text-align: center;
+}
+
+.tab-clean {
+  width: 8px;
+}
+
+.tab-name {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-close {
+  padding: 0 2px;
+  border-radius: 3px;
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.tab-close:hover {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+.editor-pane {
+  min-height: 0;
+  flex: 1;
+}
+
+.editor-host {
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ---------- 通知 ---------- */
+
+.toast {
+  position: fixed;
+  top: 44px;
+  right: 16px;
+  z-index: 100;
+  max-width: 420px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-active);
+  color: var(--text);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  font-size: 12px;
+}

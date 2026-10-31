@@ -10,6 +10,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@codemirror/commands':
+        specifier: ^6.11.1
+        version: 6.11.1
       '@codemirror/merge':
         specifier: ^6.12.3
         version: 6.12.3
@@ -22,6 +25,9 @@ importers:
       '@tauri-apps/api':
         specifier: ^2
         version: 2.12.4
+      '@tauri-apps/plugin-dialog':
+        specifier: ^2.8.4
+        version: 2.8.4
     devDependencies:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^7.1.2
@@ -46,6 +52,9 @@ importers:
         version: 8.3.5(esbuild@0.28.2)
 
 packages:
+
+  '@codemirror/commands@6.11.1':
+    resolution: {integrity: sha512-O/4hG3SC1YwcmQ0d2UVNDs+AsaNWd1iHVxbTeEBuqH+6bExAiPK3iS/BvpY6rZGURALv4ZD3sIgcCmRvw3ehBg==}
 
   '@codemirror/language@6.13.1':
     resolution: {integrity: sha512-zfvU2r3TyylQLMj/te+5CnQ0rSqZi8B1oTCBbQkagcLW4Xc6imab6qN+pEJhsuNOLaJqiRyBXp9UhWA1DhVvDw==}
@@ -448,6 +457,9 @@ packages:
     engines: {node: '>= 10'}
     hasBin: true
 
+  '@tauri-apps/plugin-dialog@2.8.4':
+    resolution: {integrity: sha512-+6ZOiXenOaxXwb8qCbBPdT2jX2cFPaVVHGIskrpmJLpmWj+qKRTD6X/z9x7hTdSQn7NedcoXCkWGej4a7dC4lw==}
+
   '@types/estree@1.0.10':
     resolution: {integrity: sha512-lTyOMnOcmRBzdCv6/4zUZCrEhV0xrqQiUZBZtVcbmLHBXKLnN8q89v/wKRF/Q0HbwVsqbIG3o5HDoFl9sduM+g==}
 
@@ -726,6 +738,13 @@ packages:
 
 snapshots:
 
+  '@codemirror/commands@6.11.1':
+    dependencies:
+      '@codemirror/language': 6.13.1
+      '@codemirror/state': 6.7.6
+      '@codemirror/view': 6.43.15
+      '@lezer/common': 1.5.4
+
   '@codemirror/language@6.13.1':
     dependencies:
       '@codemirror/state': 6.7.6
@@ -981,6 +1000,10 @@ snapshots:
       '@tauri-apps/cli-win32-arm64-msvc': 2.12.4
       '@tauri-apps/cli-win32-ia32-msvc': 2.12.4
       '@tauri-apps/cli-win32-x64-msvc': 2.12.4
+
+  '@tauri-apps/plugin-dialog@2.8.4':
+    dependencies:
+      '@tauri-apps/api': 2.12.4
 
   '@types/estree@1.0.10': {}
 

@@ -4,6 +4,7 @@
 //! 领域逻辑放在 `crates/` 下的各 crate 中，便于独立测试。
 
 mod commands;
+mod fs_commands;
 
 use fly_core::trace;
 use tauri::Manager;
@@ -33,6 +34,7 @@ pub fn run() {
     trace::mark("rust.main.enter");
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             greet,
             app_info,
@@ -44,7 +46,11 @@ pub fn run() {
             commands::git_stage,
             commands::git_unstage,
             commands::git_discard,
-            commands::git_apply_hunks
+            commands::git_apply_hunks,
+            fs_commands::fs_read_text,
+            fs_commands::fs_write_text,
+            fs_commands::fs_list_dir,
+            fs_commands::fs_is_dir
         ])
         .setup(|app| {
             trace::mark("tauri.setup.begin");

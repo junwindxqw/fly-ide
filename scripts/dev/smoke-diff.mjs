@@ -108,11 +108,17 @@ await step("前端已挂载且无错误", async () => {
 });
 
 await step("加载仓库状态", async () => {
+  // 默认面板是文件树，先切到 Git 面板
   await evaluate(`(() => {
-    const inp = document.querySelector('.git-input');
+    const gitTab = [...document.querySelectorAll('.activitybar button')].find((b) => b.textContent.trim() === 'Git');
+    if (!gitTab) throw new Error('找不到 Git 面板按钮');
+    gitTab.click();
+  })()`);
+  await evaluate(`(() => {
+    const inp = document.querySelector('.git-toolbar input.git-input');
     inp.value = ${JSON.stringify(repoRoot)};
     inp.dispatchEvent(new Event('input'));
-    document.querySelector('.git-load').click();
+    document.querySelector('.git-toolbar .git-load').click();
   })()`);
   await waitFor("git meta", `({ ok: !!document.querySelector('.git-meta') })`);
 });

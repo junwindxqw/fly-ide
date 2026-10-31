@@ -10,7 +10,7 @@ use tokio::task::spawn_blocking;
 
 use fly_git::{FilePatch, NumStat, Repo, RepoStatus, StatusEntry};
 
-async fn run_blocking<T, F>(task: F) -> Result<T, String>
+pub(crate) async fn run_blocking<T, F>(task: F) -> Result<T, String>
 where
     T: Send + 'static,
     F: FnOnce() -> Result<T, String> + Send + 'static,

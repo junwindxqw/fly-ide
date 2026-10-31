@@ -2,6 +2,8 @@
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
   import DiffViewer from "./lib/editor/DiffViewer.svelte";
+  import EditorPane from "./lib/editor/EditorPane.svelte";
+  import { cursorInfo, createDoc, isDirty, type DocEntry } from "./lib/editor/doc";
   import {
     applyHunks,
     discardFiles,
@@ -17,6 +19,8 @@
     type NumStat,
     type StatusEntry,
   } from "./lib/git";
+  import { fsReadText, fsWriteText, pickFolder } from "./lib/fs";
+  import FileTree from "./lib/workspace/FileTree.svelte";
 
   type PanelId = "explorer" | "search" | "git" | "settings";
 
@@ -27,13 +31,16 @@
     { id: "settings", label: "设置", title: "设置" },
   ];
 
-  let activePanel = $state<PanelId>("git");
-  let greetMsg = $state("");
-  let appInfo = $state("读取中…");
+  let activePanel = $state<PanelId>("explorer");
   let marks = $state<string[]>([]);
 
+  // ---- 工作区（文件树与 Git 面板共享的已提交路径） ----
+  let workspacePath = $state("");
+  let gitPathDraft = $state("");
+  let toast = $state("");
+  let toastTimer: ReturnType<typeof setTimeout> | undefined;
+
   // ---- Git 面板状态（Phase 2 纵切片） ----
-  let repoPath = $state("");
   let gitStatus = $state<GitStatus | null>(null);
   let gitError = $state("");
   let gitLoading = $state(false);
@@ -42,12 +49,19 @@
   let numWorktree = $state<NumStat[]>([]);
 
   // ---- Diff 视图状态 ----
-  let selectedPath = $state("");
+  let diffPath = $state("");
   let selectedStaged = $state(false);
   let fileDiff = $state<FileDiff | null>(null);
   let diffLoading = $state(false);
   let diffError = $state("");
   let pendingConfirm = $state("");
+
+  // ---- 编辑器文档状态 ----
+  let docs = $state<DocEntry[]>([]);
+  let activePath = $state("");
+  let cursor = $state({ line: 1, col: 1 });
+
+  const activeDoc = $derived(docs.find((doc) => doc.path === activePath) ?? null);
 
   const stagedEntries = $derived(
     gitStatus?.entries.filter((entry) => !entry.untracked && !entry.unmerged && entry.x !== ".") ?? [],
@@ -65,8 +79,9 @@
     { title: "冲突", entries: unmergedEntries, staged: false },
   ]);
 
+  const diffOpen = $derived(fileDiff !== null);
   const selectedEntry = $derived(
-    gitStatus?.entries.find((entry) => entry.path === selectedPath) ?? null,
+    gitStatus?.entries.find((entry) => entry.path === diffPath) ?? null,
   );
   const canViewStaged = $derived(
     selectedEntry !== null && selectedEntry.x !== "." && !selectedEntry.untracked,
@@ -74,6 +89,14 @@
   const canViewWorktree = $derived(
     selectedEntry !== null && (selectedEntry.y !== "." || selectedEntry.untracked),
   );
+
+  function showToast(message: string) {
+    toast = message;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      toast = "";
+    }, 4000);
+  }
 
   function numstatFor(path: string, staged: boolean): NumStat | undefined {
     return (staged ? numStaged : numWorktree).find((stat) => stat.path === path);
@@ -90,11 +113,12 @@
   }
 
   async function refreshGit() {
-    const root = repoPath.trim();
+    const root = gitPathDraft.trim();
     if (!root) {
       gitError = "请输入 git 仓库根目录";
       return;
     }
+    workspacePath = root;
     gitLoading = true;
     gitError = "";
     try {
@@ -120,12 +144,12 @@
   }
 
   async function loadDiff(path: string, staged: boolean) {
-    selectedPath = path;
+    diffPath = path;
     selectedStaged = staged;
     diffLoading = true;
     diffError = "";
     try {
-      fileDiff = await loadFileDiff(repoPath.trim(), path, staged);
+      fileDiff = await loadFileDiff(workspacePath, path, staged);
     } catch (err) {
       fileDiff = null;
       diffError = String(err);
@@ -140,20 +164,22 @@
 
   function closeDiff() {
     fileDiff = null;
-    selectedPath = "";
+    diffPath = "";
     diffError = "";
     pendingConfirm = "";
   }
 
-  /// 操作后刷新状态；选中文件若已无变更则关闭 diff
+  /// 操作后刷新状态；diff 文件若已无变更则关闭 diff
   async function afterOp() {
-    await refreshGit();
-    if (!selectedPath) {
+    if (gitPathDraft.trim()) {
+      await refreshGit();
+    }
+    if (!diffPath) {
       return;
     }
-    const stillDirty = gitStatus?.entries.some((entry) => entry.path === selectedPath);
+    const stillDirty = gitStatus?.entries.some((entry) => entry.path === diffPath);
     if (stillDirty) {
-      await loadDiff(selectedPath, selectedStaged);
+      await loadDiff(diffPath, selectedStaged);
     } else {
       closeDiff();
     }
@@ -162,13 +188,12 @@
   async function opFiles(op: "stage" | "unstage" | "discard") {
     diffError = "";
     try {
-      const root = repoPath.trim();
       if (op === "stage") {
-        await stageFiles(root, [selectedPath]);
+        await stageFiles(workspacePath, [diffPath]);
       } else if (op === "unstage") {
-        await unstageFiles(root, [selectedPath]);
+        await unstageFiles(workspacePath, [diffPath]);
       } else {
-        await discardFiles(root, [selectedPath]);
+        await discardFiles(workspacePath, [diffPath]);
       }
       await afterOp();
     } catch (err) {
@@ -179,7 +204,7 @@
   async function opHunks(action: HunkAction, index: number) {
     diffError = "";
     try {
-      await applyHunks(repoPath.trim(), selectedPath, [index], action);
+      await applyHunks(workspacePath, diffPath, [index], action);
       await afterOp();
     } catch (err) {
       diffError = String(err);
@@ -206,6 +231,83 @@
     return `@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@${section}`;
   }
 
+  // ---- 编辑器文档 ----
+
+  /** 稳定回调：CM6 updateListener 在打开文档时被捕获进 state 扩展，
+   *  必须保证身份稳定；$state 读取走信号，总是拿到最新值。 */
+  function handleDocChanged(path: string, state: import("@codemirror/state").EditorState) {
+    docs = docs.map((doc) => (doc.path === path ? { ...doc, state } : doc));
+    if (path === activePath) {
+      cursor = cursorInfo(state);
+    }
+  }
+
+  async function openTextFile(path: string) {
+    const existing = docs.find((doc) => doc.path === path);
+    if (existing) {
+      activateDoc(path);
+      return;
+    }
+    try {
+      const file = await fsReadText(path);
+      if (file.binary) {
+        showToast("二进制文件，暂不支持查看");
+        return;
+      }
+      docs = [...docs, createDoc(path, file, handleDocChanged)];
+      activateDoc(path);
+    } catch (err) {
+      showToast(String(err));
+    }
+  }
+
+  function activateDoc(path: string) {
+    activePath = path;
+    fileDiff = null;
+    diffPath = "";
+    const doc = docs.find((entry) => entry.path === path);
+    if (doc) {
+      cursor = cursorInfo(doc.state);
+    }
+  }
+
+  function closeDoc(path: string) {
+    const index = docs.findIndex((doc) => doc.path === path);
+    if (index < 0) {
+      return;
+    }
+    docs = docs.filter((doc) => doc.path !== path);
+    if (activePath === path) {
+      const next = docs[index] ?? docs[index - 1];
+      activePath = next?.path ?? "";
+      const doc = next ? cursorInfo(next.state) : null;
+      if (doc) {
+        cursor = doc;
+      }
+    }
+  }
+
+  async function saveDoc(path: string) {
+    const doc = docs.find((entry) => entry.path === path);
+    if (!doc) {
+      return;
+    }
+    if (doc.readOnly) {
+      showToast("只读文件（大文件降级），不保存");
+      return;
+    }
+    const text = doc.state.doc.toString();
+    try {
+      await fsWriteText(path, text, doc.eol, doc.encoding, doc.bom);
+      docs = docs.map((entry) =>
+        entry.path === path ? { ...entry, originalText: text } : entry,
+      );
+      showToast(`已保存 ${doc.name}`);
+    } catch (err) {
+      showToast(`保存失败：${String(err)}`);
+    }
+  }
+
   function panelTitle(id: PanelId): string {
     return panels.find((panel) => panel.id === id)?.title ?? "";
   }
@@ -219,26 +321,25 @@
     }
   }
 
-  async function greet() {
-    greetMsg = await invoke<string>("greet", { name: "Fly IDE" });
-  }
-
   onMount(() => {
     void mark("ui.mounted");
-    invoke<string>("app_info")
-      .then((info) => {
-        appInfo = info;
-      })
-      .catch((err) => {
-        appInfo = `调用失败：${String(err)}`;
-      });
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        if (activePath) {
+          void saveDoc(activePath);
+        }
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   });
 </script>
 
 <div class="workbench">
   <header class="titlebar">
     <span class="app-name">Fly IDE</span>
-    <span class="app-tag">Phase 0 · diff 视图</span>
+    <span class="app-tag">Phase 1 · 编辑器</span>
   </header>
 
   <nav class="activitybar" aria-label="活动栏">
@@ -257,14 +358,34 @@
   <aside class="sidebar">
     <div class="panel-title">{panelTitle(activePanel)}</div>
     {#if activePanel === "explorer"}
-      <div class="panel-body">打开文件夹后在此显示文件树（Phase 1 实现）。</div>
+      <div class="git-toolbar">
+        <input
+          class="git-input"
+          value={workspacePath}
+          placeholder="工作区文件夹路径"
+          aria-label="工作区路径"
+          onchange={(event) => (workspacePath = event.currentTarget.value.trim())}
+        />
+        <button
+          type="button"
+          class="git-load"
+          title="选择文件夹"
+          onclick={async () => {
+            const dir = await pickFolder();
+            if (dir) {
+              workspacePath = dir;
+            }
+          }}
+        >…</button>
+      </div>
+      <FileTree root={workspacePath} activePath={activePath} onOpenFile={openTextFile} />
     {:else if activePanel === "search"}
-      <div class="panel-body">全局搜索面板（Phase 1 实现，Rust ripgrep）。</div>
+      <div class="panel-body">全局搜索面板（Phase 1 后续实现，Rust ripgrep）。</div>
     {:else if activePanel === "git"}
       <div class="git-toolbar">
         <input
           class="git-input"
-          bind:value={repoPath}
+          bind:value={gitPathDraft}
           placeholder="仓库根目录，如 D:\myProject\fly_ide"
           aria-label="仓库根目录"
         />
@@ -292,7 +413,7 @@
                 <button
                   type="button"
                   class="git-row"
-                  class:git-row-active={entry.path === selectedPath}
+                  class:git-row-active={entry.path === diffPath}
                   title={entry.origPath ? `${entry.origPath} → ${entry.path}` : entry.path}
                   onclick={() => openDiff(entry.path)}
                 >
@@ -311,7 +432,7 @@
         <div class="panel-body">输入 git 仓库根目录后加载状态。</div>
       {/if}
     {:else}
-      <div class="panel-body">设置面板（Phase 1 实现）。</div>
+      <div class="panel-body">设置面板（后续实现）。</div>
     {/if}
   </aside>
 
@@ -319,23 +440,23 @@
     {#if diffError}
       <p class="git-error diff-error">{diffError}</p>
     {/if}
-    {#if fileDiff}
+    {#if diffOpen}
       <div class="diff-header">
-        <span class="diff-path" title={fileDiff.path}>{fileDiff.path}</span>
+        <span class="diff-path" title={fileDiff?.path}>{fileDiff?.path}</span>
         <span class="diff-source">
           <button
             type="button"
             class="diff-chip"
-            class:diff-chip-on={!fileDiff.staged}
+            class:diff-chip-on={!fileDiff?.staged}
             disabled={!canViewWorktree}
-            onclick={() => loadDiff(selectedPath, false)}
+            onclick={() => loadDiff(diffPath, false)}
           >工作区</button>
           <button
             type="button"
             class="diff-chip"
-            class:diff-chip-on={fileDiff.staged}
+            class:diff-chip-on={fileDiff?.staged}
             disabled={!canViewStaged}
-            onclick={() => loadDiff(selectedPath, true)}
+            onclick={() => loadDiff(diffPath, true)}
           >暂存区</button>
         </span>
         <span class="diff-file-actions">
@@ -349,22 +470,22 @@
             <button
               type="button"
               class="diff-btn diff-danger"
-              onclick={() => confirmThen(`f:${selectedPath}`, () => opFiles("discard"))}
-            >{pendingConfirm === `f:${selectedPath}` ? "确认丢弃？" : "丢弃"}</button>
+              onclick={() => confirmThen(`f:${diffPath}`, () => opFiles("discard"))}
+            >{pendingConfirm === `f:${diffPath}` ? "确认丢弃？" : "丢弃"}</button>
           {/if}
           <button type="button" class="diff-btn" title="关闭 diff" onclick={closeDiff}>✕</button>
         </span>
       </div>
       <div class="diff-hunks">
-        {#if fileDiff.binary}
+        {#if fileDiff?.binary}
           <span class="diff-hunk-note">二进制文件</span>
-        {:else if fileDiff.hunks.length === 0}
-          <span class="diff-hunk-note">无 hunk（{fileDiff.staged ? "暂存区" : "工作区"}无差异）</span>
+        {:else if (fileDiff?.hunks.length ?? 0) === 0}
+          <span class="diff-hunk-note">无 hunk（{fileDiff?.staged ? "暂存区" : "工作区"}无差异）</span>
         {:else}
-          {#each fileDiff.hunks as hunk (hunk.index)}
+          {#each fileDiff?.hunks ?? [] as hunk (hunk.index)}
             <span class="diff-hunk-chip">
               <span class="mono">{hunkLabel(hunk)}</span>
-              {#if fileDiff.staged}
+              {#if fileDiff?.staged}
                 <button type="button" class="diff-btn" onclick={() => opHunks("unstage", hunk.index)}>
                   取消暂存
                 </button>
@@ -382,49 +503,64 @@
           {/each}
         {/if}
       </div>
-      {#if diffError}
-        <p class="git-error diff-error">{diffError}</p>
-      {/if}
       <div class="diff-body">
         {#if diffLoading}
           <div class="diff-binary">加载中…</div>
         {:else}
           <DiffViewer
-            oldText={fileDiff.oldText}
-            newText={fileDiff.newText}
-            binary={fileDiff.binary}
+            oldText={fileDiff?.oldText ?? ""}
+            newText={fileDiff?.newText ?? ""}
+            binary={fileDiff?.binary ?? false}
           />
         {/if}
       </div>
-    {:else if diffLoading && selectedPath}
-      <div class="welcome"><div class="diff-binary">加载 diff 中…</div></div>
+    {:else if docs.length > 0}
+      <div class="tabbar" role="tablist">
+        {#each docs as doc (doc.path)}
+          <div
+            class="tab"
+            class:tab-active={doc.path === activePath}
+            role="tab"
+            aria-selected={doc.path === activePath}
+            tabindex="0"
+            onclick={() => activateDoc(doc.path)}
+            onkeydown={(event) => {
+              if (event.key === "Enter") {
+                activateDoc(doc.path);
+              }
+            }}
+          >
+            <span class="tab-dirty" class:tab-clean={!isDirty(doc)}>{isDirty(doc) ? "●" : ""}</span>
+            <span class="tab-name" title={doc.path}>{doc.name}{doc.readOnly ? "（只读）" : ""}</span>
+            <button
+              type="button"
+              class="tab-close"
+              title="关闭"
+              onclick={(event) => {
+                event.stopPropagation();
+                closeDoc(doc.path);
+              }}
+            >✕</button>
+          </div>
+        {/each}
+      </div>
+      <div class="editor-pane">
+        {#if activeDoc}
+          <EditorPane editorState={activeDoc.state} />
+        {:else}
+          <div class="welcome"><div class="diff-binary">无打开的文件</div></div>
+        {/if}
+      </div>
     {:else}
       <div class="welcome">
         <h1>Fly IDE</h1>
-        <p class="sub">轻量级 Windows IDE：AI 写代码，人来审阅。在 Git 面板点击文件查看 diff。</p>
-
+        <p class="sub">轻量级 Windows IDE：AI 写代码，人来审阅。</p>
         <section class="card">
-          <h2>IPC 冒烟测试</h2>
-          <div class="row">
-            <button type="button" class="primary" onclick={greet}>调用 Rust greet</button>
-            <span class="mono">{greetMsg || "（未调用）"}</span>
-          </div>
-          <p class="hint">Rust 侧返回：<span class="mono">{appInfo}</span></p>
-        </section>
-
-        <section class="card">
-          <h2>启动标记（Phase 0 性能基线）</h2>
-          <p class="hint">
-            每次关键节点调用 Rust <code>mark()</code>，追加写入
-            <code>%LOCALAPPDATA%\FlyIDE\logs\startup.jsonl</code>。
-          </p>
-          {#if marks.length > 0}
-            <ul class="marks">
-              {#each marks as m (m)}
-                <li>{m}</li>
-              {/each}
-            </ul>
-          {/if}
+          <h2>开始</h2>
+          <ul class="marks">
+            <li>文件面板：选择文件夹浏览，点击文件打开编辑；Ctrl+S 保存</li>
+            <li>Git 面板：加载仓库后点击改动文件查看 diff，可按 hunk 暂存</li>
+          </ul>
         </section>
       </div>
     {/if}
@@ -434,8 +570,18 @@
     <span>分支: {gitStatus?.branch ?? "—"}</span>
     <span>问题: 0</span>
     <span class="spacer"></span>
-    <span>行 1，列 1</span>
-    <span>UTF-8</span>
-    <span>LF</span>
+    {#if activeDoc}
+      <span>行 {cursor.line}，列 {cursor.col}</span>
+      <span>{activeDoc.encoding}{activeDoc.bom ? " BOM" : ""}</span>
+      <span>{activeDoc.eol}</span>
+    {:else}
+      <span>行 1，列 1</span>
+      <span>UTF-8</span>
+      <span>LF</span>
+    {/if}
   </footer>
+
+  {#if toast}
+    <div class="toast">{toast}</div>
+  {/if}
 </div>

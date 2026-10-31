@@ -1,8 +1,13 @@
 #![forbid(unsafe_code)]
 
 //! 文件读写、编码/行尾处理、原子保存、大文件分级。
-//!
-//! Phase 0：先落地大文件分级策略（对应开发计划 3.8），Phase 1 实现完整读写。
+
+pub mod text;
+
+pub use text::{
+    detect_eol, is_binary, normalize_eol, read_text_file, write_text_file, Eol, TextEncoding,
+    TextError, TextFile,
+};
 
 /// 文件大小分级：决定编辑器启用哪些特性，避免大文件卡死。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,6 +25,23 @@ pub enum SizeTier {
 pub const FULL_FEATURE_LIMIT: u64 = 2 * 1024 * 1024;
 pub const REDUCED_LIMIT: u64 = 10 * 1024 * 1024;
 pub const READ_ONLY_LIMIT: u64 = 50 * 1024 * 1024;
+
+impl SizeTier {
+    /// 按字节数返回文件分级。
+    pub fn from_size(bytes: u64) -> Self {
+        size_tier(bytes)
+    }
+
+    /// DTO/前端使用的标识串。
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Full => "full",
+            Self::Reduced => "reduced",
+            Self::ReadOnlyPlain => "readOnlyPlain",
+            Self::TooLarge => "tooLarge",
+        }
+    }
+}
 
 /// 按字节数返回文件分级。
 pub fn size_tier(bytes: u64) -> SizeTier {
@@ -45,5 +67,17 @@ mod tests {
         assert_eq!(size_tier(READ_ONLY_LIMIT - 1), SizeTier::ReadOnlyPlain);
         assert_eq!(size_tier(READ_ONLY_LIMIT), SizeTier::TooLarge);
         assert_eq!(size_tier(u64::MAX), SizeTier::TooLarge);
+    }
+
+    #[test]
+    fn from_size_matches_free_function() {
+        assert_eq!(SizeTier::from_size(1), size_tier(1));
+        assert_eq!(SizeTier::from_size(READ_ONLY_LIMIT), SizeTier::TooLarge);
+    }
+
+    #[test]
+    fn tier_strings_for_dto() {
+        assert_eq!(SizeTier::Full.as_str(), "full");
+        assert_eq!(SizeTier::ReadOnlyPlain.as_str(), "readOnlyPlain");
     }
 }
