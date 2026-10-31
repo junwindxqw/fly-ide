@@ -3,6 +3,8 @@
 //! 该 crate 只做「壳」：命令注册、窗口生命周期、与前端 IPC。
 //! 领域逻辑放在 `crates/` 下的各 crate 中，便于独立测试。
 
+mod commands;
+
 use fly_core::trace;
 use tauri::Manager;
 
@@ -21,7 +23,9 @@ fn app_info() -> String {
 /// 写入一条启动/性能标记（见 `fly_core::trace`）。
 #[tauri::command]
 fn mark(name: &str) {
-    trace::mark(name);
+    // 名称来自 WebView，截断防日志文件被撑爆
+    let name: String = name.chars().take(100).collect();
+    trace::mark(&name);
 }
 
 pub fn run() {
@@ -29,13 +33,18 @@ pub fn run() {
     trace::mark("rust.main.enter");
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet, app_info, mark])
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            app_info,
+            mark,
+            commands::git_version,
+            commands::git_status,
+            commands::git_numstat
+        ])
         .setup(|app| {
             trace::mark("tauri.setup.begin");
-            if let Some(window) = app.get_webview_window("main") {
+            if app.get_webview_window("main").is_some() {
                 trace::mark("tauri.window.ready");
-                let _ = window;
             }
             trace::mark("tauri.setup.end");
             Ok(())

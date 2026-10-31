@@ -17,9 +17,9 @@ tauri-build = { workspace = true }
 
 [dependencies]
 tauri = { workspace = true }
-tauri-plugin-opener = "2"
 serde = { workspace = true }
 serde_json = { workspace = true }
+tokio = { workspace = true }
 fly-core = { path = "../../../crates/fly-core" }
 fly-fs = { path = "../../../crates/fly-fs" }
 fly-workspace = { path = "../../../crates/fly-workspace" }

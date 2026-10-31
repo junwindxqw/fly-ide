@@ -226,3 +226,128 @@ button {
 .statusbar .spacer {
   flex: 1;
 }
+
+/* ---------- Git 面板（Phase 2 纵切片） ---------- */
+
+.git-toolbar {
+  display: flex;
+  gap: 6px;
+  padding: 0 12px 8px;
+}
+
+.git-input {
+  min-width: 0;
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-editor);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.git-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.git-load {
+  flex: none;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+.git-load:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.git-error {
+  margin: 0;
+  padding: 0 12px;
+  color: #e06c75;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.git-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 8px;
+  padding: 0 12px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.git-branch {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.git-ver {
+  margin-left: auto;
+}
+
+.git-group {
+  margin: 0 12px 10px;
+}
+
+.git-group-title {
+  padding: 4px 0;
+  color: var(--text-dim);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.git-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.git-row:hover {
+  background: var(--bg-hover);
+}
+
+.git-xy {
+  flex: none;
+  width: 24px;
+  color: var(--accent);
+  font-family: "Cascadia Code", Consolas, monospace;
+}
+
+.git-path {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-numstat {
+  flex: none;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+}
+
+.git-add {
+  color: #7ec96f;
+}
+
+.git-del {
+  margin-left: 4px;
+  color: #e06c75;
+}
+
+.git-empty {
+  padding: 2px 6px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
