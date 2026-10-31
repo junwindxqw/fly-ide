@@ -7,6 +7,7 @@
   import { cursorInfo, createDoc, isDirty, type DocEntry } from "./lib/editor/doc";
   import {
     applyHunks,
+    commitFiles,
     discardFiles,
     loadFileDiff,
     loadGitNumstat,
@@ -60,6 +61,14 @@
   let diffError = $state("");
   let pendingConfirm = $state("");
 
+  // ---- 提交框状态 ----
+  let commitMessage = $state("");
+  let commitAmend = $state(false);
+  let commitSignoff = $state(false);
+  let commitNoVerify = $state(false);
+  let commitOutput = $state("");
+  let committing = $state(false);
+
   // ---- 编辑器文档状态 ----
   let docs = $state<DocEntry[]>([]);
   let activePath = $state("");
@@ -106,6 +115,52 @@
     toastTimer = setTimeout(() => {
       toast = "";
     }, 4000);
+  }
+
+  const canCommit = $derived(
+    !committing &&
+      commitMessage.trim().length > 0 &&
+      (commitAmend || stagedEntries.length > 0),
+  );
+
+  // 提交消息草稿按仓库持久化（localStorage）
+  $effect(() => {
+    const repo = workspacePath;
+    commitMessage = localStorage.getItem(`flyide:commit-draft:${repo}`) ?? "";
+    commitOutput = "";
+  });
+  $effect(() => {
+    const repo = workspacePath;
+    const message = commitMessage;
+    if (repo) {
+      localStorage.setItem(`flyide:commit-draft:${repo}`, message);
+    }
+  });
+
+  async function doCommit() {
+    const message = commitMessage.trim();
+    if (!message) {
+      return;
+    }
+    committing = true;
+    commitOutput = "";
+    try {
+      const output = await commitFiles(workspacePath, message, {
+        amend: commitAmend,
+        signoff: commitSignoff,
+        noVerify: commitNoVerify,
+      });
+      commitOutput = output;
+      commitMessage = "";
+      showToast(commitAmend ? "已修补提交" : "提交成功");
+      await refreshGit();
+    } catch (err) {
+      // hooks 拒绝等失败原因完整展示给用户
+      commitOutput = String(err);
+      await refreshGit().catch(() => {});
+    } finally {
+      committing = false;
+    }
   }
 
   function numstatFor(path: string, staged: boolean): NumStat | undefined {
@@ -506,6 +561,35 @@
           {/if}
           {#if gitVersion}<span class="git-ver">git {gitVersion}</span>{/if}
         </p>
+        <div class="commit-box">
+          <textarea
+            class="commit-message"
+            bind:value={commitMessage}
+            placeholder="提交消息（Ctrl+Enter 提交）"
+            rows="3"
+            aria-label="提交消息"
+            onkeydown={(event) => {
+              if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+                event.preventDefault();
+                if (canCommit) {
+                  void doCommit();
+                }
+              }
+            }}
+          ></textarea>
+          <div class="commit-options">
+            <label><input type="checkbox" bind:checked={commitAmend} /> amend</label>
+            <label><input type="checkbox" bind:checked={commitSignoff} /> sign-off</label>
+            <label><input type="checkbox" bind:checked={commitNoVerify} /> no-verify</label>
+            <span class="commit-spacer"></span>
+            <button type="button" class="commit-btn" disabled={!canCommit} onclick={() => void doCommit()}>
+              {committing ? "提交中…" : commitAmend ? "修补提交" : "提交"}
+            </button>
+          </div>
+          {#if commitOutput}
+            <pre class="commit-output">{commitOutput}</pre>
+          {/if}
+        </div>
         {#each gitGroups as group (group.title)}
           <div class="git-group">
             <div class="git-group-title">{group.title}（{group.entries.length}）</div>

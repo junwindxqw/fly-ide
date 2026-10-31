@@ -3,10 +3,11 @@
 //! 与 `src/status.rs`、`src/numstat.rs` 的纯解析单测互补，
 //! 这里验证「命令参数 → 真实 git 输出 → 解析」整条链路的格式假设。
 
+use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use fly_git::{FileStatus, Repo};
+use fly_git::{CommitOptions, FileStatus, GitError, Repo};
 
 fn git(dir: &Path, args: &[&str]) {
     let output = Command::new("git")
@@ -302,4 +303,144 @@ fn diff_view_sources_handle_untracked_and_deleted() {
         Some("v1\n")
     );
     assert_eq!(repo.show("HEAD", "missing.txt").expect("读取失败"), None);
+}
+
+fn last_commit_subject(repo: &Repo) -> String {
+    let out = Command::new("git")
+        .arg("-C")
+        .arg(repo.root())
+        .args(["log", "-1", "--pretty=%s"])
+        .output()
+        .expect("git log");
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
+}
+
+fn last_commit_body(repo: &Repo) -> String {
+    let out = Command::new("git")
+        .arg("-C")
+        .arg(repo.root())
+        .args(["log", "-1", "--pretty=%B"])
+        .output()
+        .expect("git log");
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+#[test]
+fn commit_staged_changes_with_message() {
+    let (dir, repo) = temp_repo();
+    write(dir.path(), "f.txt", "v1\n");
+    git(dir.path(), &["add", "-A"]);
+    git(dir.path(), &["commit", "-m", "init"]);
+
+    write(dir.path(), "f.txt", "v2\n");
+    repo.stage_paths(&["f.txt"]).expect("暂存");
+
+    let output = repo
+        .commit("feat: 测试提交\n\n正文行", &CommitOptions::default())
+        .expect("提交成功");
+    assert!(output.contains("main"), "输出应含分支信息: {output}");
+    assert_eq!(last_commit_subject(&repo), "feat: 测试提交");
+    assert!(last_commit_body(&repo).contains("正文行"));
+}
+
+#[test]
+fn commit_without_staged_changes_fails() {
+    let (dir, repo) = temp_repo();
+    write(dir.path(), "f.txt", "v1\n");
+    git(dir.path(), &["add", "-A"]);
+    git(dir.path(), &["commit", "-m", "init"]);
+
+    let err = repo
+        .commit("empty", &CommitOptions::default())
+        .expect_err("无暂存变更应失败");
+    let GitError::CommandFailed { stderr, .. } = err else {
+        panic!("应为 CommandFailed: {err:?}");
+    };
+    assert!(stderr.contains("nothing to commit"), "stderr: {stderr}");
+}
+
+#[test]
+fn commit_amend_replaces_message() {
+    let (dir, repo) = temp_repo();
+    write(dir.path(), "f.txt", "v1\n");
+    git(dir.path(), &["add", "-A"]);
+    git(dir.path(), &["commit", "-m", "init"]);
+
+    repo.commit(
+        "amended: 新消息",
+        &CommitOptions {
+            amend: true,
+            ..Default::default()
+        },
+    )
+    .expect("amend 提交");
+    assert_eq!(last_commit_subject(&repo), "amended: 新消息");
+    // amend 不应产生新提交
+    let count = Command::new("git")
+        .arg("-C")
+        .arg(repo.root())
+        .args(["rev-list", "--count", "HEAD"])
+        .output()
+        .expect("rev-list");
+    assert_eq!(String::from_utf8_lossy(&count.stdout).trim(), "1");
+}
+
+#[test]
+fn commit_signoff_adds_trailer() {
+    let (dir, repo) = temp_repo();
+    write(dir.path(), "f.txt", "v1\n");
+    git(dir.path(), &["add", "-A"]);
+    git(dir.path(), &["commit", "-m", "init"]);
+    write(dir.path(), "f.txt", "v2\n");
+    repo.stage_paths(&["f.txt"]).expect("暂存");
+
+    repo.commit(
+        "feat: signed",
+        &CommitOptions {
+            signoff: true,
+            ..Default::default()
+        },
+    )
+    .expect("提交");
+    let body = last_commit_body(&repo);
+    assert!(
+        body.contains("Signed-off-by: fly <fly@example.com>"),
+        "应含 Signed-off-by: {body}"
+    );
+}
+
+#[test]
+fn commit_no_verify_skips_failing_hook() {
+    let (dir, repo) = temp_repo();
+    write(dir.path(), "f.txt", "v1\n");
+    git(dir.path(), &["add", "-A"]);
+    git(dir.path(), &["commit", "-m", "init"]);
+    write(dir.path(), "f.txt", "v2\n");
+    repo.stage_paths(&["f.txt"]).expect("暂存");
+
+    // 安装一个必然失败的 pre-commit hook（Git for Windows 经 sh 执行）
+    let hook = dir.path().join(".git").join("hooks").join("pre-commit");
+    fs::write(&hook, "#!/bin/sh\necho 'hook says NO'\nexit 1\n").expect("写入 hook");
+
+    let err = repo
+        .commit("blocked", &CommitOptions::default())
+        .expect_err("hook 拒绝应失败");
+    let GitError::CommandFailed { stderr, .. } = err else {
+        panic!("应为 CommandFailed: {err:?}");
+    };
+    assert!(
+        stderr.contains("hook says NO"),
+        "hooks 输出应保留: {stderr}"
+    );
+
+    // --no-verify 跳过 hook
+    repo.commit(
+        "bypassed",
+        &CommitOptions {
+            no_verify: true,
+            ..Default::default()
+        },
+    )
+    .expect("no-verify 提交成功");
+    assert_eq!(last_commit_subject(&repo), "bypassed");
 }

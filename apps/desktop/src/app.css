@@ -748,3 +748,78 @@ button.git-row:hover,
   white-space: nowrap;
   font-family: "Cascadia Code", Consolas, monospace;
 }
+
+/* ---------- 提交框 ---------- */
+
+.commit-box {
+  margin: 0 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-editor);
+}
+
+.commit-message {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+  resize: vertical;
+  outline: none;
+}
+
+.commit-options {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.commit-options label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+}
+
+.commit-spacer {
+  flex: 1;
+}
+
+.commit-btn {
+  padding: 3px 14px;
+  border: none;
+  border-radius: 5px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+}
+
+.commit-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.commit-btn:hover:not(:disabled) {
+  filter: brightness(1.15);
+}
+
+.commit-output {
+  max-height: 160px;
+  margin: 0;
+  padding: 6px 8px;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

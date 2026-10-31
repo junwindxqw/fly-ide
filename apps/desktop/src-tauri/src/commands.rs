@@ -272,3 +272,35 @@ pub async fn git_apply_hunks(
     })
     .await
 }
+
+/// 提交选项。
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitOptionsDto {
+    pub amend: bool,
+    pub signoff: bool,
+    pub no_verify: bool,
+}
+
+/// 提交暂存区，返回命令输出（提交摘要 + hooks 输出）。
+/// 失败（hooks 拒绝、无暂存变更等）时 Err 携带可展示文本。
+#[tauri::command]
+pub async fn git_commit(
+    root: String,
+    message: String,
+    options: CommitOptionsDto,
+) -> Result<String, String> {
+    run_blocking(move || {
+        let repo = repo_of(&root)?;
+        repo.commit(
+            &message,
+            &fly_git::CommitOptions {
+                amend: options.amend,
+                signoff: options.signoff,
+                no_verify: options.no_verify,
+            },
+        )
+        .map_err(|err| err.to_string())
+    })
+    .await
+}

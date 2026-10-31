@@ -51,6 +51,7 @@ pub fn run() {
             commands::git_unstage,
             commands::git_discard,
             commands::git_apply_hunks,
+            commands::git_commit,
             fs_commands::fs_read_text,
             fs_commands::fs_write_text,
             fs_commands::fs_list_dir,

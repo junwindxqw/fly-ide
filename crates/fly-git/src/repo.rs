@@ -1,14 +1,21 @@
 //! 仓库发现与 git 命令封装。
 
-use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 
 use crate::error::GitError;
 use crate::numstat::{parse_numstat, NumStat};
 use crate::patch::{build_patch, parse_patch, FilePatch};
-use crate::process::run_git;
+use crate::process::{run_git, run_git_with_stdin};
 use crate::status::{parse_status, RepoStatus};
+
+/// 提交选项（对应开发计划 3.6.2 Commit 行）。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct CommitOptions {
+    pub amend: bool,
+    pub signoff: bool,
+    pub no_verify: bool,
+}
 
 /// 一个已发现的 git 仓库（工作区根目录）。
 #[derive(Debug, Clone)]
@@ -133,32 +140,41 @@ impl Repo {
             args.push("-R");
         }
         args.push("-");
-
-        let mut child = Command::new("git")
-            .arg("-C")
-            .arg(&self.root)
-            .args(&args)
-            .stdin(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|err| match err.kind() {
-                std::io::ErrorKind::NotFound => GitError::GitNotFound,
-                _ => GitError::Io(err),
-            })?;
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin
-                .write_all(patch.as_bytes())
-                .and_then(|_| stdin.flush())
-                .map_err(GitError::Io)?;
-        }
-        let output = child.wait_with_output().map_err(GitError::Io)?;
-        if !output.status.success() {
-            return Err(GitError::CommandFailed {
-                cmd: format!("git {}", args.join(" ")),
-                stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
-            });
-        }
+        run_git_with_stdin(&self.root, &args, Some(patch.as_bytes()))?;
         Ok(())
+    }
+
+    /// 提交暂存区（`git commit -F -`，消息经 stdin 传入）。
+    ///
+    /// 返回合并的命令输出（提交摘要 + hooks 输出），供前端展示。
+    /// GitError::CommandFailed 的 stderr 同样携带 hooks 输出——
+    /// pre-commit 拒绝时调用方应把错误文本展示给用户而非静默吞掉。
+    pub fn commit(&self, message: &str, opts: &CommitOptions) -> Result<String, GitError> {
+        let mut args = vec!["commit", "-F", "-"];
+        if opts.amend {
+            args.push("--amend");
+        }
+        if opts.signoff {
+            args.push("-s");
+        }
+        if opts.no_verify {
+            args.push("--no-verify");
+        }
+        match run_git_with_stdin(&self.root, &args, Some(message.as_bytes())) {
+            Ok((stdout, stderr)) => {
+                let mut out = String::from_utf8_lossy(&stdout).into_owned();
+                let err_text = String::from_utf8_lossy(&stderr).into_owned();
+                if !out.is_empty() && !err_text.is_empty() {
+                    out.push('\n');
+                }
+                out.push_str(&err_text);
+                Ok(out)
+            }
+            Err(GitError::CommandFailed { cmd, stderr }) => {
+                Err(GitError::CommandFailed { cmd, stderr })
+            }
+            Err(err) => Err(err),
+        }
     }
 
     /// 暂存指定 hunk（工作区 → 暂存区）。索引从 0 开始，指向

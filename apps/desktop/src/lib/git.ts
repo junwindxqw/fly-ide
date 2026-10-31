@@ -91,3 +91,18 @@ export function applyHunks(
 ): Promise<void> {
   return invoke("git_apply_hunks", { root, path, hunks, action });
 }
+
+export interface CommitOptions {
+  amend: boolean;
+  signoff: boolean;
+  noVerify: boolean;
+}
+
+/** 提交暂存区，返回命令输出（提交摘要 + hooks 输出）。 */
+export function commitFiles(
+  root: string,
+  message: string,
+  options: CommitOptions,
+): Promise<string> {
+  return invoke("git_commit", { root, message, options });
+}

@@ -108,19 +108,28 @@ await step("前端已挂载且无错误", async () => {
 });
 
 await step("加载仓库状态", async () => {
-  // 默认面板是文件树，先切到 Git 面板
-  await evaluate(`(() => {
-    const gitTab = [...document.querySelectorAll('.activitybar button')].find((b) => b.textContent.trim() === 'Git');
-    if (!gitTab) throw new Error('找不到 Git 面板按钮');
-    gitTab.click();
-  })()`);
-  await evaluate(`(() => {
-    const inp = document.querySelector('.git-toolbar input.git-input');
-    inp.value = ${JSON.stringify(repoRoot)};
-    inp.dispatchEvent(new Event('input'));
-    document.querySelector('.git-toolbar .git-load').click();
-  })()`);
-  await waitFor("git meta", `({ ok: !!document.querySelector('.git-meta') })`);
+  // 默认面板是文件树，先切到 Git 面板；沙箱 git 偶发失败 → 整步重试
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      await evaluate(`(() => {
+        const gitTab = [...document.querySelectorAll('.activitybar button')].find((b) => b.textContent.trim() === 'Git');
+        if (!gitTab) throw new Error('找不到 Git 面板按钮');
+        gitTab.click();
+        const inp = document.querySelector('.git-toolbar input.git-input');
+        inp.value = ${JSON.stringify(repoRoot)};
+        inp.dispatchEvent(new Event('input', { bubbles: true }));
+        document.querySelector('.git-toolbar .git-load').click();
+      })()`);
+      await waitFor("git meta", `({ ok: !!document.querySelector('.git-meta') })`);
+      return;
+    } catch (error) {
+      if (attempt === 2) {
+        throw error;
+      }
+      console.log(`      WARN 加载失败，重试: ${error.message}`);
+      await sleep(3000);
+    }
+  }
 });
 
 await step("预热：首次 git_diff_file（沙箱冷启动可能极慢）", async () => {
@@ -164,21 +173,36 @@ await step("hunk 暂存后文件变为 MM", async () => {
 });
 
 await step("切换暂存区视图并取消暂存，回到 .M", async () => {
-  await evaluate(`(() => {
-    const chip = [...document.querySelectorAll('.diff-chip')].find((b) => b.textContent.trim() === '暂存区');
-    if (!chip) throw new Error('找不到暂存区切换按钮');
-    chip.click();
-  })()`);
-  // 等暂存区视图真正渲染出取消暂存按钮（加载期间 chips 为空，不能盲点）
-  await waitFor(
-    "暂存区视图渲染",
-    `({ ok: [...document.querySelectorAll('.diff-hunk-chip .diff-btn')].some((b) => b.textContent.trim() === '取消暂存') })`,
-  );
-  // 沙箱下偶发点击不触发/命令极慢：点击后轮询 UI 状态（DOM 轮询，不发起新 invoke），最多重试 3 次
+  // 沙箱偶发 git 失败会使 diff 关闭（错误横幅可见）：检测到即重新打开 diff 重试
   for (let attempt = 1; attempt <= 3; attempt++) {
     await evaluate(`(() => {
+      if (!document.querySelector('.diff-host')) {
+        const row = [...document.querySelectorAll('button.git-row')].find((b) => b.textContent.includes('README.md'));
+        if (!row) throw new Error('README.md 不在改动列表，无法重开 diff');
+        row.click();
+      } else {
+        const chip = [...document.querySelectorAll('.diff-chip')].find((b) => b.textContent.trim() === '暂存区');
+        if (chip && !chip.disabled) { chip.click(); }
+      }
+    })()`);
+    const stagedView = await waitFor(
+      "暂存区视图渲染",
+      `(() => ({
+        ok: [...document.querySelectorAll('.diff-hunk-chip .diff-btn')].some((b) => b.textContent.trim() === '取消暂存'),
+        diffErr: (document.querySelector('.diff-error') || {}).textContent || null,
+      }))()`,
+      { timeoutMs: 30000, intervalMs: 1000 },
+    ).catch(() => null);
+    if (!stagedView || !stagedView.ok) {
+      if (attempt === 3) {
+        throw new Error(`暂存区视图三次未渲染: ${JSON.stringify(stagedView)}`);
+      }
+      console.log(`      WARN 暂存区视图未渲染（疑似环境抖动），重开重试`);
+      await sleepMs(3000);
+      continue;
+    }
+    await evaluate(`(() => {
       const btn = [...document.querySelectorAll('.diff-hunk-chip .diff-btn')].find((b) => b.textContent.trim() === '取消暂存');
-      if (!btn) throw new Error('取消暂存按钮消失');
       btn.click();
     })()`);
     const settled = await waitFor(
@@ -195,15 +219,15 @@ await step("切换暂存区视图并取消暂存，回到 .M", async () => {
       { timeoutMs: 90000, intervalMs: 1500 },
     ).catch(() => null);
     if (settled && settled.ok) {
-      break;
+      const row = await waitFor("README xy=.M", rowWithXy(".M"));
+      assert(row.xy === ".M", `期望 .M，实际 ${row.xy}`);
+      return;
     }
     if (attempt === 3) {
       throw new Error(`取消暂存三次未生效，最后状态: ${JSON.stringify(settled)}`);
     }
     await sleepMs(3000);
   }
-  const row = await waitFor("README xy=.M", rowWithXy(".M"));
-  assert(row.xy === ".M", `期望 .M，实际 ${row.xy}`);
 });
 
 await step("两段式确认丢弃后仓库恢复干净", async () => {
