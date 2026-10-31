@@ -36,6 +36,8 @@ fn temp_repo() -> (tempfile::TempDir, Repo) {
     git(dir.path(), &["init", "-b", "main"]);
     git(dir.path(), &["config", "user.name", "fly"]);
     git(dir.path(), &["config", "user.email", "fly@example.com"]);
+    // CRLF 行为确定性：不自动转换，避免 CI 与本机 autocrlf 配置差异
+    git(dir.path(), &["config", "core.autocrlf", "false"]);
     let repo = Repo::discover(dir.path()).expect("应发现仓库根");
     (dir, repo)
 }
@@ -153,4 +155,151 @@ fn numstat_counts_worktree_changes() {
     assert_eq!(stat.added, Some(2));
     assert_eq!(stat.deleted, Some(0));
     assert_eq!(stat.orig_path, None);
+}
+
+#[test]
+fn stage_single_hunk_round_trip() {
+    let (dir, repo) = temp_repo();
+    let body: String = (1..=12).map(|i| format!("line{i}\n")).collect();
+    write(dir.path(), "f.txt", &body);
+    git(dir.path(), &["add", "-A"]);
+    git(dir.path(), &["commit", "-m", "init"]);
+
+    // 两处相距足够远的修改 → 恰好 2 个 hunk
+    let modified = body
+        .replacen("line2\n", "LINE2\n", 1)
+        .replacen("line11\n", "LINE11\n", 1);
+    assert_ne!(modified, body);
+    write(dir.path(), "f.txt", &modified);
+
+    let file = repo
+        .file_patch("f.txt", false)
+        .expect("patch 生成失败")
+        .expect("应有 patch");
+    assert_eq!(file.hunks.len(), 2, "两处远距离修改应产生两个 hunk");
+
+    // 只暂存第一个 hunk → index 含 LINE2、不含 LINE11，工作区两者都有
+    repo.stage_hunks("f.txt", &[0]).expect("暂存 hunk");
+    let status = repo.status().expect("status");
+    let entry = status
+        .entries
+        .iter()
+        .find(|entry| entry.path == "f.txt")
+        .expect("f.txt 应在状态中");
+    assert_eq!(entry.index, FileStatus::Modified);
+    assert_eq!(entry.worktree, FileStatus::Modified, "应为 MM（部分暂存）");
+
+    let index_text = repo
+        .index_text("f.txt")
+        .expect("读取 index 失败")
+        .expect("index 有文件");
+    assert!(index_text.contains("LINE2\n"));
+    assert!(!index_text.contains("LINE11\n"));
+    assert!(index_text.contains("line11\n"));
+
+    // 取消暂存同一 hunk → index 回到 HEAD
+    repo.unstage_hunks("f.txt", &[0]).expect("取消暂存 hunk");
+    let index_text = repo
+        .index_text("f.txt")
+        .expect("读取 index 失败")
+        .expect("index 有文件");
+    assert!(!index_text.contains("LINE2\n"));
+    assert!(!index_text.contains("LINE11\n"));
+}
+
+#[test]
+fn crlf_survives_hunk_staging() {
+    let (dir, repo) = temp_repo();
+    write(dir.path(), "crlf.txt", "alpha\r\nbeta\r\ngamma\r\n");
+    git(dir.path(), &["add", "-A"]);
+    git(dir.path(), &["commit", "-m", "init"]);
+
+    write(dir.path(), "crlf.txt", "alpha\r\nBETA\r\ngamma\r\n");
+    repo.stage_hunks("crlf.txt", &[0]).expect("暂存 hunk");
+
+    let index_text = repo
+        .index_text("crlf.txt")
+        .expect("读取 index 失败")
+        .expect("index 有文件");
+    assert!(index_text.contains("BETA"), "改动应已入 index");
+    assert!(
+        index_text.contains("\r\n"),
+        "index 内容必须保留 CRLF，实际：{index_text:?}"
+    );
+}
+
+#[test]
+fn file_level_stage_unstage_discard() {
+    let (dir, repo) = temp_repo();
+    write(dir.path(), "m.txt", "hello\n");
+    write(dir.path(), "k.txt", "keep\n");
+    git(dir.path(), &["add", "-A"]);
+    git(dir.path(), &["commit", "-m", "init"]);
+
+    write(dir.path(), "m.txt", "changed\n");
+    write(dir.path(), "new.txt", "brand new\n");
+
+    repo.stage_paths(&["m.txt", "new.txt"]).expect("批量暂存");
+    let status = repo.status().expect("status");
+    let m = status.entries.iter().find(|e| e.path == "m.txt").unwrap();
+    assert_eq!(m.index, FileStatus::Modified);
+    assert_eq!(m.worktree, FileStatus::Unmodified);
+    let new = status.entries.iter().find(|e| e.path == "new.txt").unwrap();
+    assert_eq!(new.index, FileStatus::Added);
+
+    repo.unstage_paths(&["new.txt"]).expect("取消暂存");
+    let status = repo.status().expect("status");
+    let new = status.entries.iter().find(|e| e.path == "new.txt").unwrap();
+    assert!(new.untracked, "取消暂存后应回到未跟踪");
+
+    repo.discard_paths(&["m.txt"]).expect("丢弃改动");
+    let status = repo.status().expect("status");
+    assert!(
+        !status.entries.iter().any(|e| e.path == "m.txt"),
+        "丢弃后 m.txt 应无变更"
+    );
+    assert_eq!(
+        repo.worktree_text("m.txt").expect("读取失败").as_deref(),
+        Some("hello\n")
+    );
+}
+
+#[test]
+fn diff_view_sources_handle_untracked_and_deleted() {
+    let (dir, repo) = temp_repo();
+    write(dir.path(), "tracked.txt", "v1\n");
+    write(dir.path(), "gone.txt", "bye\n");
+    git(dir.path(), &["add", "-A"]);
+    git(dir.path(), &["commit", "-m", "init"]);
+
+    // 未跟踪：index 无、工作区有 → 工作区 diff 视图 old=""
+    write(dir.path(), "fresh.txt", "hello\n");
+    assert_eq!(repo.index_text("fresh.txt").expect("读取失败"), None);
+    assert_eq!(
+        repo.worktree_text("fresh.txt")
+            .expect("读取失败")
+            .as_deref(),
+        Some("hello\n")
+    );
+    assert!(repo
+        .file_patch("fresh.txt", false)
+        .expect("patch 生成失败")
+        .is_none());
+
+    // 工作区删除：index 有、工作区无 → old=index 内容、new=""
+    std::fs::remove_file(dir.path().join("gone.txt")).expect("删除");
+    assert_eq!(repo.worktree_text("gone.txt").expect("读取失败"), None);
+    assert_eq!(
+        repo.index_text("gone.txt").expect("读取失败").as_deref(),
+        Some("bye\n")
+    );
+
+    // HEAD 内容读取
+    assert_eq!(
+        repo.show("HEAD", "tracked.txt")
+            .expect("读取失败")
+            .as_deref(),
+        Some("v1\n")
+    );
+    assert_eq!(repo.show("HEAD", "missing.txt").expect("读取失败"), None);
 }

@@ -9,6 +9,7 @@
 
 mod error;
 mod numstat;
+mod patch;
 mod process;
 mod repo;
 mod status;
@@ -16,6 +17,7 @@ mod version;
 
 pub use error::GitError;
 pub use numstat::{parse_numstat, NumStat};
+pub use patch::{build_patch, parse_patch, FilePatch, PatchHunk};
 pub use repo::Repo;
 pub use status::{parse_status, FileStatus, RepoStatus, StatusEntry};
 pub use version::{detect_version, ensure_min_version, is_version_supported, MIN_GIT_VERSION};

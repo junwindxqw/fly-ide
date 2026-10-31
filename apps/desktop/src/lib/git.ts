@@ -30,6 +30,26 @@ export interface NumStat {
   origPath: string | null;
 }
 
+export interface HunkInfo {
+  index: number;
+  oldStart: number;
+  oldLines: number;
+  newStart: number;
+  newLines: number;
+  section: string | null;
+}
+
+export interface FileDiff {
+  path: string;
+  staged: boolean;
+  binary: boolean;
+  oldText: string;
+  newText: string;
+  hunks: HunkInfo[];
+}
+
+export type HunkAction = "stage" | "unstage" | "discard";
+
 export function loadGitStatus(root: string): Promise<GitStatus> {
   return invoke("git_status", { root });
 }
@@ -40,4 +60,34 @@ export function loadGitNumstat(root: string, staged: boolean): Promise<NumStat[]
 
 export function loadGitVersion(): Promise<string> {
   return invoke("git_version");
+}
+
+/** 单文件 diff 数据：old/new 文本 + hunk 列表。 */
+export function loadFileDiff(root: string, path: string, staged: boolean): Promise<FileDiff> {
+  return invoke("git_diff_file", { root, path, staged });
+}
+
+/** 文件级暂存。 */
+export function stageFiles(root: string, paths: string[]): Promise<void> {
+  return invoke("git_stage", { root, paths });
+}
+
+/** 文件级取消暂存。 */
+export function unstageFiles(root: string, paths: string[]): Promise<void> {
+  return invoke("git_unstage", { root, paths });
+}
+
+/** 文件级丢弃（Rollback 到 HEAD；新文件删除）。 */
+export function discardFiles(root: string, paths: string[]): Promise<void> {
+  return invoke("git_discard", { root, paths });
+}
+
+/** hunk 级操作。 */
+export function applyHunks(
+  root: string,
+  path: string,
+  hunks: number[],
+  action: HunkAction,
+): Promise<void> {
+  return invoke("git_apply_hunks", { root, path, hunks, action });
 }

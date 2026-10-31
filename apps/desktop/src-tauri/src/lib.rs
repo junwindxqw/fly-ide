@@ -39,7 +39,12 @@ pub fn run() {
             mark,
             commands::git_version,
             commands::git_status,
-            commands::git_numstat
+            commands::git_numstat,
+            commands::git_diff_file,
+            commands::git_stage,
+            commands::git_unstage,
+            commands::git_discard,
+            commands::git_apply_hunks
         ])
         .setup(|app| {
             trace::mark("tauri.setup.begin");

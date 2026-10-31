@@ -5,10 +5,10 @@
 
 use std::path::Path;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::task::spawn_blocking;
 
-use fly_git::{NumStat, Repo, RepoStatus, StatusEntry};
+use fly_git::{FilePatch, NumStat, Repo, RepoStatus, StatusEntry};
 
 async fn run_blocking<T, F>(task: F) -> Result<T, String>
 where
@@ -119,6 +119,156 @@ pub async fn git_numstat(root: String, staged: bool) -> Result<Vec<NumStatDto>, 
         let repo = repo_of(&root)?;
         let stats = repo.diff_numstat(staged).map_err(|err| err.to_string())?;
         Ok(stats.iter().map(NumStatDto::from).collect())
+    })
+    .await
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HunkDto {
+    pub index: usize,
+    pub old_start: u32,
+    pub old_lines: u32,
+    pub new_start: u32,
+    pub new_lines: u32,
+    pub section: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileDiffDto {
+    pub path: String,
+    pub staged: bool,
+    pub binary: bool,
+    pub old_text: String,
+    pub new_text: String,
+    pub hunks: Vec<HunkDto>,
+}
+
+/// hunk 级操作方向。
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum HunkAction {
+    /// 工作区 → 暂存区
+    Stage,
+    /// 暂存区 → 工作区
+    Unstage,
+    /// 丢弃工作区改动（回滚到 HEAD）
+    Discard,
+}
+
+/// 读取单文件的 diff 数据：old/new 文本（渲染用）+ hunk 列表（操作用）。
+///
+/// - `staged=false`（工作区 diff）：old = 暂存区内容，new = 工作区内容；
+/// - `staged=true`（暂存区 diff）：old = HEAD 内容，new = 暂存区内容；
+/// - 未跟踪文件 old 为空；已删除文件 new 为空。
+///
+/// 实现：3 次 git spawn（index 探测/读取 + diff）加 1 次工作区读盘。
+/// 每次优先保正确性；真实环境 spawn ~10-50ms，若成为热点再合并。
+#[tauri::command]
+pub async fn git_diff_file(
+    root: String,
+    path: String,
+    staged: bool,
+) -> Result<FileDiffDto, String> {
+    run_blocking(move || {
+        let repo = repo_of(&root)?;
+        let (old_text, new_text) = if staged {
+            let old = repo.show("HEAD", &path).map_err(|err| err.to_string())?;
+            let new = repo.index_text(&path).map_err(|err| err.to_string())?;
+            (old, new)
+        } else {
+            let old = repo.index_text(&path).map_err(|err| err.to_string())?;
+            let new = repo.worktree_text(&path).map_err(|err| err.to_string())?;
+            (old, new)
+        };
+        let old_text = old_text.unwrap_or_default();
+        let new_text = new_text.unwrap_or_default();
+        let binary = old_text.contains('\0') || new_text.contains('\0');
+
+        let hunks = repo
+            .file_patch(&path, staged)
+            .map_err(|err| err.to_string())?
+            .map(|FilePatch { hunks, .. }| {
+                hunks
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, hunk)| HunkDto {
+                        index,
+                        old_start: hunk.old_start,
+                        old_lines: hunk.old_lines,
+                        new_start: hunk.new_start,
+                        new_lines: hunk.new_lines,
+                        section: hunk.section,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        Ok(FileDiffDto {
+            path,
+            staged,
+            binary,
+            old_text,
+            new_text,
+            hunks,
+        })
+    })
+    .await
+}
+
+/// 文件级暂存。
+#[tauri::command]
+pub async fn git_stage(root: String, paths: Vec<String>) -> Result<(), String> {
+    run_blocking(move || {
+        let repo = repo_of(&root)?;
+        let refs: Vec<&str> = paths.iter().map(String::as_str).collect();
+        repo.stage_paths(&refs).map_err(|err| err.to_string())
+    })
+    .await
+}
+
+/// 文件级取消暂存。
+#[tauri::command]
+pub async fn git_unstage(root: String, paths: Vec<String>) -> Result<(), String> {
+    run_blocking(move || {
+        let repo = repo_of(&root)?;
+        let refs: Vec<&str> = paths.iter().map(String::as_str).collect();
+        repo.unstage_paths(&refs).map_err(|err| err.to_string())
+    })
+    .await
+}
+
+/// 文件级丢弃（Rollback 到 HEAD；新文件取消暂存并删除）。不可恢复。
+#[tauri::command]
+pub async fn git_discard(root: String, paths: Vec<String>) -> Result<(), String> {
+    run_blocking(move || {
+        let repo = repo_of(&root)?;
+        let refs: Vec<&str> = paths.iter().map(String::as_str).collect();
+        repo.discard_paths(&refs).map_err(|err| err.to_string())
+    })
+    .await
+}
+
+/// hunk 级操作：`hunks` 为 [`git_diff_file`] 返回的 hunk 索引子集。
+#[tauri::command]
+pub async fn git_apply_hunks(
+    root: String,
+    path: String,
+    hunks: Vec<usize>,
+    action: HunkAction,
+) -> Result<(), String> {
+    run_blocking(move || {
+        if hunks.is_empty() {
+            return Err("未选择任何 hunk".to_string());
+        }
+        let repo = repo_of(&root)?;
+        let result = match action {
+            HunkAction::Stage => repo.stage_hunks(&path, &hunks),
+            HunkAction::Unstage => repo.unstage_hunks(&path, &hunks),
+            HunkAction::Discard => repo.discard_hunks(&path, &hunks),
+        };
+        result.map_err(|err| err.to_string())
     })
     .await
 }

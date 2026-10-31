@@ -351,3 +351,141 @@ button {
   color: var(--text-dim);
   font-size: 12px;
 }
+
+/* Git 行现在是可点击按钮（打开 diff） */
+button.git-row {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+
+button.git-row:hover,
+.git-row-active {
+  background: var(--bg-hover);
+}
+
+.git-row-active {
+  outline: 1px solid var(--accent);
+}
+
+/* ---------- Diff 视图（CM6 unifiedMergeView） ---------- */
+
+.diff-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-side);
+}
+
+.diff-path {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+}
+
+.diff-source,
+.diff-file-actions {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
+.diff-chip,
+.diff-btn {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-editor);
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.diff-chip:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.diff-chip-on {
+  border-color: var(--accent);
+  color: var(--text);
+  background: var(--bg-active);
+}
+
+.diff-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.diff-danger:hover:not(:disabled) {
+  border-color: #e06c75;
+  color: #e06c75;
+}
+
+.diff-hunks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-titlebar);
+}
+
+.diff-hunk-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-side);
+  font-size: 11px;
+}
+
+.diff-hunk-note {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.diff-error {
+  padding: 4px 12px;
+  background: var(--bg-titlebar);
+}
+
+.diff-body {
+  min-height: 0;
+  flex: 1;
+}
+
+.diff-host {
+  height: 100%;
+  overflow: hidden;
+}
+
+.diff-binary {
+  padding: 24px;
+  color: var(--text-dim);
+}
+
+/* CM6 merge 视图在暗色主题下的基础可读性 */
+.diff-host .cm-gutters {
+  background: var(--bg-side);
+  border-right: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+.diff-host .cm-changedLine {
+  background: rgba(46, 160, 67, 0.15);
+}
+
+.diff-host .cm-deletedChunk {
+  background: rgba(229, 83, 75, 0.15);
+}
