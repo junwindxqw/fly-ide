@@ -5,10 +5,13 @@
   let {
     root,
     activePath = "",
+    version = 0,
     onOpenFile,
   }: {
     root: string;
     activePath?: string;
+    /** 递增以重新拉取根目录与已展开目录（外部文件变更后刷新） */
+    version?: number;
     onOpenFile: (path: string) => void;
   } = $props();
 
@@ -32,6 +35,21 @@
     }
   }
 
+  async function refreshLoaded() {
+    // 重新拉取根目录与已展开目录（保留展开状态）
+    const targets = [root, ...Object.keys(expanded).filter((path) => expanded[path])];
+    try {
+      const updates: Record<string, DirEntry[]> = { ...children };
+      for (const path of targets) {
+        updates[path] = await fsListDir(path);
+      }
+      children = updates;
+      loadError = "";
+    } catch (err) {
+      loadError = String(err);
+    }
+  }
+
   $effect(() => {
     const dir = root;
     if (!dir) {
@@ -42,6 +60,15 @@
     loadError = "";
     // children 的读取会建立依赖导致循环刷新，这里只关心 root
     untrack(() => void ensureChildren(dir));
+  });
+
+  $effect(() => {
+    const dir = root;
+    const v = version;
+    if (!dir || v === 0) {
+      return;
+    }
+    untrack(() => void refreshLoaded());
   });
 
   function toggle(path: string) {

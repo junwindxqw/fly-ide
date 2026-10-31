@@ -5,6 +5,8 @@
 
 mod commands;
 mod fs_commands;
+mod search_commands;
+mod watch_commands;
 
 use fly_core::trace;
 use tauri::Manager;
@@ -35,6 +37,8 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .manage(search_commands::SearchState::new())
+        .manage(watch_commands::WatchState::new())
         .invoke_handler(tauri::generate_handler![
             greet,
             app_info,
@@ -50,7 +54,12 @@ pub fn run() {
             fs_commands::fs_read_text,
             fs_commands::fs_write_text,
             fs_commands::fs_list_dir,
-            fs_commands::fs_is_dir
+            fs_commands::fs_is_dir,
+            search_commands::search_files,
+            search_commands::search_content,
+            search_commands::search_cancel,
+            watch_commands::watch_start,
+            watch_commands::watch_stop
         ])
         .setup(|app| {
             trace::mark("tauri.setup.begin");

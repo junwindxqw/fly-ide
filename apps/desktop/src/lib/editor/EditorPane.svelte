@@ -26,6 +26,10 @@
     const next = editorState;
     if (view && view.state !== next) {
       view.setState(next);
+      // 切换文档/跳转行后把光标滚到可视区中央
+      view.dispatch({
+        effects: EditorView.scrollIntoView(next.selection.main.head, { y: "center" }),
+      });
     }
   });
 </script>

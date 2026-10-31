@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
+  import { listen } from "@tauri-apps/api/event";
   import { onMount } from "svelte";
   import DiffViewer from "./lib/editor/DiffViewer.svelte";
   import EditorPane from "./lib/editor/EditorPane.svelte";
@@ -20,6 +21,9 @@
     type StatusEntry,
   } from "./lib/git";
   import { fsReadText, fsWriteText, pickFolder } from "./lib/fs";
+  import QuickOpen from "./lib/search/QuickOpen.svelte";
+  import SearchPanel from "./lib/search/SearchPanel.svelte";
+  import { watchStart, watchStop, type FsChangedPayload } from "./lib/search";
   import FileTree from "./lib/workspace/FileTree.svelte";
 
   type PanelId = "explorer" | "search" | "git" | "settings";
@@ -60,6 +64,12 @@
   let docs = $state<DocEntry[]>([]);
   let activePath = $state("");
   let cursor = $state({ line: 1, col: 1 });
+
+  // ---- 快速打开 / 文件监听 ----
+  let quickOpenOpen = $state(false);
+  let treeVersion = $state(0);
+  let gitRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+  let unlistenFsChanged: (() => void) | null = null;
 
   const activeDoc = $derived(docs.find((doc) => doc.path === activePath) ?? null);
 
@@ -242,10 +252,10 @@
     }
   }
 
-  async function openTextFile(path: string) {
+  async function openTextFile(path: string, targetLine?: number) {
     const existing = docs.find((doc) => doc.path === path);
     if (existing) {
-      activateDoc(path);
+      activateDoc(path, targetLine);
       return;
     }
     try {
@@ -254,20 +264,44 @@
         showToast("二进制文件，暂不支持查看");
         return;
       }
-      docs = [...docs, createDoc(path, file, handleDocChanged)];
+      docs = [...docs, createDoc(path, file, handleDocChanged, targetLine)];
       activateDoc(path);
     } catch (err) {
       showToast(String(err));
     }
   }
 
-  function activateDoc(path: string) {
+  function activateDoc(path: string, targetLine?: number) {
     activePath = path;
     fileDiff = null;
     diffPath = "";
+    if (targetLine === undefined) {
+      const doc = docs.find((entry) => entry.path === path);
+      if (doc) {
+        cursor = cursorInfo(doc.state);
+      }
+      return;
+    }
+    // 带行号打开：重建 state 使光标落到目标行
     const doc = docs.find((entry) => entry.path === path);
-    if (doc) {
-      cursor = cursorInfo(doc.state);
+    if (!doc) {
+      return;
+    }
+    const file = {
+      text: doc.state.doc.toString(),
+      encoding: doc.encoding,
+      bom: doc.bom,
+      eol: doc.eol,
+      size: 0,
+      tier: doc.tier,
+      binary: false,
+    };
+    docs = docs.map((entry) =>
+      entry.path === path ? createDoc(path, file, handleDocChanged, targetLine) : entry,
+    );
+    const updated = docs.find((entry) => entry.path === path);
+    if (updated) {
+      cursor = cursorInfo(updated.state);
     }
   }
 
@@ -308,6 +342,49 @@
     }
   }
 
+  /// 外部文件变更：重载干净的打开文档、防抖刷新 git 状态与文件树
+  function handleFsChanged(paths: string[]) {
+    if (paths.length === 0) {
+      return;
+    }
+    void (async () => {
+      let notified = false;
+      for (const doc of docs) {
+        if (!paths.includes(doc.path)) {
+          continue;
+        }
+        try {
+          const file = await fsReadText(doc.path);
+          if (file.binary) {
+            continue;
+          }
+          const current = doc.state.doc.toString();
+          if (file.text === current) {
+            continue; // 自己刚保存的内容，跳过以保留撤销历史
+          }
+          if (isDirty(doc)) {
+            if (!notified) {
+              notified = true;
+              showToast("有文件已被外部修改，未覆盖未保存的编辑");
+            }
+            continue;
+          }
+          const line = cursorInfo(doc.state).line;
+          docs = docs.map((entry) =>
+            entry.path === doc.path ? createDoc(doc.path, file, handleDocChanged, line) : entry,
+          );
+        } catch {
+          // 文件可能已被删除，文件树刷新即可
+        }
+      }
+    })();
+    if (gitStatus) {
+      clearTimeout(gitRefreshTimer);
+      gitRefreshTimer = setTimeout(() => void refreshGit(), 1200);
+    }
+    treeVersion += 1;
+  }
+
   function panelTitle(id: PanelId): string {
     return panels.find((panel) => panel.id === id)?.title ?? "";
   }
@@ -323,8 +400,19 @@
 
   onMount(() => {
     void mark("ui.mounted");
+    void listen<FsChangedPayload>("fs-changed", (event) => {
+      handleFsChanged(event.payload.paths ?? []);
+    }).then((unlisten) => {
+      unlistenFsChanged = unlisten;
+    });
     const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+      const ctrl = event.ctrlKey || event.metaKey;
+      if (ctrl && event.key.toLowerCase() === "p") {
+        event.preventDefault();
+        quickOpenOpen = !quickOpenOpen;
+        return;
+      }
+      if (ctrl && event.key.toLowerCase() === "s") {
         event.preventDefault();
         if (activePath) {
           void saveDoc(activePath);
@@ -332,7 +420,22 @@
       }
     };
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      unlistenFsChanged?.();
+    };
+  });
+
+  // 工作区变化时启停文件监听
+  $effect(() => {
+    const root = workspacePath.trim();
+    if (!root) {
+      return;
+    }
+    void watchStart(root).catch((err) => showToast(String(err)));
+    return () => {
+      void watchStop().catch(() => {});
+    };
   });
 </script>
 
@@ -378,9 +481,9 @@
           }}
         >…</button>
       </div>
-      <FileTree root={workspacePath} activePath={activePath} onOpenFile={openTextFile} />
+      <FileTree root={workspacePath} activePath={activePath} version={treeVersion} onOpenFile={openTextFile} />
     {:else if activePanel === "search"}
-      <div class="panel-body">全局搜索面板（Phase 1 后续实现，Rust ripgrep）。</div>
+      <SearchPanel root={workspacePath} onOpenFile={openTextFile} />
     {:else if activePanel === "git"}
       <div class="git-toolbar">
         <input
@@ -559,6 +662,8 @@
           <h2>开始</h2>
           <ul class="marks">
             <li>文件面板：选择文件夹浏览，点击文件打开编辑；Ctrl+S 保存</li>
+            <li>Ctrl+P：快速打开文件（模糊搜索）</li>
+            <li>搜索面板：全局内容搜索（ripgrep），点击结果跳转到行</li>
             <li>Git 面板：加载仓库后点击改动文件查看 diff，可按 hunk 暂存</li>
           </ul>
         </section>
@@ -583,5 +688,13 @@
 
   {#if toast}
     <div class="toast">{toast}</div>
+  {/if}
+
+  {#if quickOpenOpen}
+    <QuickOpen
+      root={workspacePath}
+      onOpenFile={openTextFile}
+      onClose={() => (quickOpenOpen = false)}
+    />
   {/if}
 </div>

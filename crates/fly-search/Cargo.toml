@@ -8,3 +8,10 @@ repository.workspace = true
 description = "项目搜索：ignore 遍历、grep 匹配、nucleo 模糊快速打开"
 
 [dependencies]
+fly-workspace = { version = "0.1.0", path = "../fly-workspace" }
+grep-matcher = "0.1.9"
+grep-regex = "0.1.14"
+grep-searcher = "0.1.17"
+ignore = "0.4.34"
+nucleo-matcher = "0.3.1"
+thiserror.workspace = true

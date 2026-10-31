@@ -615,3 +615,136 @@ button.git-row:hover,
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
   font-size: 12px;
 }
+
+/* ---------- 快速打开 ---------- */
+
+.quickopen-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.quickopen {
+  display: flex;
+  flex-direction: column;
+  max-width: 640px;
+  max-height: 60vh;
+  margin: 60px auto 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-side);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.quickopen-input {
+  flex: none;
+  padding: 10px 14px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-editor);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+
+.quickopen-list {
+  flex: 1;
+  overflow: auto;
+  padding: 4px 0;
+}
+
+.quickopen-item {
+  display: block;
+  width: 100%;
+  padding: 5px 14px;
+  color: var(--text-dim);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quickopen-item-active {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+.quickopen-hint {
+  padding: 10px 14px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+/* ---------- 搜索面板 ---------- */
+
+.search-options {
+  display: flex;
+  gap: 12px;
+  padding: 0 12px 8px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.search-options label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.search-hint {
+  padding: 2px 12px 8px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.search-group {
+  margin: 0 8px 8px;
+}
+
+.search-group-title {
+  padding: 4px 0;
+  color: var(--text);
+  font-size: 11px;
+  font-family: "Cascadia Code", Consolas, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-size: 12px;
+  text-align: left;
+}
+
+.search-row:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.search-line {
+  flex: none;
+  width: 42px;
+  text-align: right;
+  color: var(--text-dim);
+  font-family: "Cascadia Code", Consolas, monospace;
+}
+
+.search-text {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: "Cascadia Code", Consolas, monospace;
+}

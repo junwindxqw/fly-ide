@@ -1,4 +1,4 @@
-import { EditorState } from "@codemirror/state";
+import { EditorSelection, EditorState } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import {
@@ -50,10 +50,22 @@ export function createDoc(
   path: string,
   file: TextFile,
   onDocChanged: (path: string, state: EditorState) => void,
+  targetLine?: number,
 ): DocEntry {
   const readOnly = file.tier === "readOnlyPlain";
+  const lines = file.text.split("\n");
+  let selection: ReturnType<typeof EditorSelection.cursor> | undefined;
+  if (targetLine !== undefined && targetLine > 1) {
+    const index = Math.min(Math.max(targetLine, 1), lines.length) - 1;
+    let offset = 0;
+    for (let i = 0; i < index; i++) {
+      offset += lines[i].length + 1;
+    }
+    selection = EditorSelection.cursor(offset);
+  }
   const state = EditorState.create({
     doc: file.text,
+    selection,
     extensions: [
       lineNumbers(),
       highlightActiveLineGutter(),

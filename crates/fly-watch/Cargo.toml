@@ -8,3 +8,4 @@ repository.workspace = true
 description = "文件监听封装：防抖、事件合并、自写事件过滤"
 
 [dependencies]
+notify = "8.2.1"
