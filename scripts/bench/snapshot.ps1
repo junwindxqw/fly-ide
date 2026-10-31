@@ -5,26 +5,51 @@
 .DESCRIPTION
     Launches Fly IDE, waits for the WebView2 child process, samples memory,
     prints startup marks from %LOCALAPPDATA%\FlyIDE\logs\startup.jsonl, then exits.
+    Aborts if another fly-ide instance is running (two instances share the
+    WebView2 user data dir and the second fails to create a webview).
     NOTE: keep this file ASCII-only (Windows PowerShell 5.1 reads scripts as ANSI).
 .PARAMETER Exe
-    Path to fly-ide.exe. Default: workspace debug build.
+    Path to fly-ide.exe. Default: workspace release build (target\release\fly-ide.exe).
+    Production-mode builds require: cargo build --release -p fly-ide --features tauri/custom-protocol
 .PARAMETER Seconds
     Memory sampling duration in seconds. Default 10.
 .EXAMPLE
-    powershell -NoProfile -ExecutionPolicy Bypass -File scripts\bench\snapshot.ps1 -Exe target\release\fly-ide.exe
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts\bench\snapshot.ps1
 #>
 [CmdletBinding()]
 param(
-    [string]$Exe = "apps\desktop\src-tauri\target\debug\fly-ide.exe",
+    [string]$Exe = "target\release\fly-ide.exe",
     [int]$Seconds = 10
 )
 
 $ErrorActionPreference = "Stop"
 
+function Get-Median([double[]]$values) {
+    $sorted = $values | Sort-Object
+    $n = $sorted.Count
+    if ($n -eq 0) { return 0.0 }
+    if ($n % 2 -eq 1) { return $sorted[[int](($n - 1) / 2)] }
+    return ($sorted[$n / 2 - 1] + $sorted[$n / 2]) / 2.0
+}
+
+function Stop-Tree([int]$ParentId) {
+    $kids = Get-CimInstance Win32_Process -Filter "ParentProcessId = $ParentId" -ErrorAction SilentlyContinue
+    foreach ($kid in $kids) {
+        Stop-Tree -ParentId $kid.ProcessId
+        Stop-Process -Id $kid.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+}
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $exePath = if ([System.IO.Path]::IsPathRooted($Exe)) { $Exe } else { Join-Path $repoRoot $Exe }
 if (-not (Test-Path $exePath)) {
-    Write-Error "Executable not found: $exePath`nBuild it first (pnpm tauri dev / cargo build --release)."
+    Write-Error "Executable not found: $exePath`nBuild it first: pnpm bench:build (or cargo build --release -p fly-ide --features tauri/custom-protocol)"
+    exit 1
+}
+
+$existing = Get-Process fly-ide -ErrorAction SilentlyContinue
+if ($existing) {
+    Write-Error ("A fly-ide instance is already running (PID {0}). Stop it first: two instances share the WebView2 user data dir and the second fails to create a webview." -f ($existing.Id -join ", "))
     exit 1
 }
 
@@ -45,8 +70,8 @@ while ($sw.Elapsed.TotalSeconds -lt 30) {
 }
 if (-not $windowReady) { Write-Warning "No WebView2 child process within 30s" }
 
-# WebView2 会先于 Tauri setup 完成前 spawn 辅助进程（如 crashpad），
-# 这里等到出现 tauri.setup.end 标记（或最多 5 秒）再读取，保证拿到完整启动链。
+# WebView2 spawns helper processes (e.g. crashpad) before tauri setup completes;
+# wait for the tauri.setup.end mark (max 5s) so the whole startup chain is visible.
 $deadline = (Get-Date).AddSeconds(5)
 while ((Get-Date) -lt $deadline) {
     Start-Sleep -Milliseconds 100
@@ -70,7 +95,7 @@ if (Test-Path $logFile) {
 }
 
 Write-Host ""
-Write-Host "-- Process tree memory (${Seconds}s) --" -ForegroundColor Cyan
+Write-Host "-- Process tree memory (${Seconds}s, median of samples) --" -ForegroundColor Cyan
 $samples = @()
 for ($i = 0; $i -lt $Seconds; $i++) {
     Start-Sleep -Seconds 1
@@ -91,16 +116,15 @@ for ($i = 0; $i -lt $Seconds; $i++) {
 
 if ($samples.Count -gt 0) {
     $samples | Format-Table -AutoSize
-    $wsAvg = ($samples.WorkingSetMB | Measure-Object -Average).Average
-    $privAvg = ($samples.PrivateMB | Measure-Object -Average).Average
-    "WorkingSet avg: {0:N1} MB" -f $wsAvg
-    "Private    avg: {0:N1} MB" -f $privAvg
+    $wsMedian = Get-Median ([double[]]$samples.WorkingSetMB)
+    $privMedian = Get-Median ([double[]]$samples.PrivateMB)
+    "WorkingSet median: {0:N1} MB" -f $wsMedian
+    "Private    median: {0:N1} MB" -f $privMedian
 } else {
     Write-Warning "No memory samples collected"
 }
 
+Stop-Tree -ParentId $proc.Id
 Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-Get-CimInstance Win32_Process -Filter "ParentProcessId = $($proc.Id)" -ErrorAction SilentlyContinue |
-    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 Write-Host ""
 Write-Host "Fly IDE processes stopped." -ForegroundColor Green

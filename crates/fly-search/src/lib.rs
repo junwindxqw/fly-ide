@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 //! 项目搜索：ignore 遍历、grep 匹配、nucleo 模糊快速打开。
 //!
 //! Phase 0：先固定结果上限与分批大小（对应开发计划 3.7）。

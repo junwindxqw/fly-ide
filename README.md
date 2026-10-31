@@ -25,6 +25,8 @@ pnpm build:web        # 仅构建前端
 pnpm check:rust       # cargo check --workspace --all-targets
 pnpm test             # cargo test --workspace
 pnpm clippy           # cargo clippy（-D warnings）
+pnpm bench:build      # 构建 release 基准二进制（生产模式）
+pnpm bench            # 启动/内存基准（scripts/bench）
 ```
 
 仓库结构见 [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md) 3.13；性能基准脚本见 [scripts/bench](scripts/bench/README.md)；Phase 0 基线结果见 [docs/benchmarks/phase0-baseline.md](docs/benchmarks/phase0-baseline.md)。

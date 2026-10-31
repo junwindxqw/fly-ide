@@ -1,41 +1,41 @@
 # Phase 0 基准报告（脚手架基线）
 
-- 日期：2026-10-30
+- 日期：2026-10-30（首次），2026-10-31（code review + Git 纵切片后复测）
 - 机器：Windows 11 Pro build 26300，AMD Ryzen 5 8600G（6C/12T），15.1GB 可用内存
 - 构建：`cargo build --release -p fly-ide --features tauri/custom-protocol`（生产模式，内嵌前端资源）
-- 前端：`pnpm build:web`（Vite 8 + Svelte 5），产物 JS 49.33 kB / gzip 19.68 kB，CSS 3.01 kB
-- 测量工具：`scripts/bench/snapshot.ps1`（启动标记 + 进程树内存采样）
+- 前端：`pnpm build:web`（Vite 8 + Svelte 5），复测产物 JS 54.54 kB / gzip 21.68 kB，CSS 4.37 kB（含 Git 面板）
+- 测量工具：`scripts/bench/snapshot.ps1`（启动标记 + 进程树内存采样，中位数）
 - 场景：空壳（无项目、无编辑器、无 LSP），只读测量，未操作窗口
 
-## 冷启动标记
+## 冷启动标记（2026-10-31 复测）
 
 | 节点 | 耗时（距进程启动） |
 |---|---|
 | `rust.main.enter` | 0.01 ms |
-| `tauri.setup.begin` | ~420 ms |
-| `tauri.window.ready` | ~420 ms |
-| `tauri.setup.end` | ~420 ms |
-| `ui.boot` | ~495 ms |
-| `ui.mounted` | **~496 ms** |
+| `tauri.setup.begin` | ~385 ms |
+| `tauri.window.ready` | ~385 ms |
+| `tauri.setup.end` | ~385 ms |
+| `ui.boot` | ~465 ms |
+| `ui.mounted` | **~466 ms** |
 
-> Tauri setup 前约 420ms 主要是 release 二进制的进程/运行时初始化与窗口创建；`setup.end → ui.boot` 约 75ms 为 WebView2 导航 + 前端模块执行。
+> 注意：构建后的**首次**启动约 1.0s（Defender 首次扫描新二进制的一次性开销），第二次起稳定在 ~0.47s。基准口径以第二次及以后为准。
 
-## 内存（进程树，10 秒稳态中位数）
+## 内存（进程树，稳态中位数）
 
 | 指标 | 数值 |
 |---|---|
 | `fly-ide` 主进程 WorkingSet | ~4 MB |
-| WebView2 子进程（6 个）合计 | ~104 MB |
-| **进程树 WorkingSet 合计** | **~108 MB** |
-| 进程树 Private 合计 | ~33 MB |
+| WebView2 子进程（6 个）合计 | ~105 MB |
+| **进程树 WorkingSet 合计** | **~109 MB** |
+| 进程树 Private 合计 | ~34 MB |
 
-## 与预算对比
+## 与预算对比（复测口径）
 
 | 指标 | 预算 | 实测 | 结论 |
 |---|---|---|---|
-| 冷启动到可交互 | ≤ 1.0s | ~0.50s | 达标 |
-| 空闲内存（小项目，无 LSP） | ≤ 180MB | ~108MB | 达标 |
-| 初始 JS 体积 | ≤ 300KB gzip | 19.7KB gzip | 达标 |
+| 冷启动到可交互 | ≤ 1.0s | ~0.47s | 达标 |
+| 空闲内存（小项目，无 LSP） | ≤ 180MB | ~109MB | 达标 |
+| 初始 JS 体积 | ≤ 300KB gzip | 21.7KB gzip | 达标 |
 
 ## 排障记录（已写入开发计划 3.12）
 

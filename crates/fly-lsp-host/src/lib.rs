@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 //! 语言服务器进程宿主：spawn、Content-Length 帧、stdio 转发、日志与重启。
 //!
 //! 只负责字节流与生命周期，LSP 协议语义在前端 `@codemirror/lsp-client` 中处理。
