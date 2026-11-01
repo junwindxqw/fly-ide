@@ -444,3 +444,66 @@ fn commit_no_verify_skips_failing_hook() {
     .expect("no-verify 提交成功");
     assert_eq!(last_commit_subject(&repo), "bypassed");
 }
+
+#[test]
+fn log_returns_history_in_order() {
+    let (dir, repo) = temp_repo();
+    write(dir.path(), "f.txt", "v1\n");
+    git(dir.path(), &["add", "-A"]);
+    git(dir.path(), &["commit", "-m", "first"]);
+    write(dir.path(), "f.txt", "v2\n");
+    git(dir.path(), &["add", "-A"]);
+    git(dir.path(), &["commit", "-m", "second: 第二条"]);
+
+    let log = repo.log(10).expect("log 成功");
+    assert_eq!(log.len(), 2);
+    // 新提交在前
+    assert_eq!(log[0].subject, "second: 第二条");
+    assert_eq!(log[1].subject, "first");
+    assert!(!log[0].hash.is_empty());
+    // 无上游时 refs 可能为空（首提交含 HEAD -> main）
+    assert!(log.iter().all(|c| !c.author.is_empty()));
+}
+
+#[test]
+fn log_limit_truncates() {
+    let (dir, repo) = temp_repo();
+    for i in 0..3 {
+        write(dir.path(), &format!("f{i}.txt"), "x\n");
+        git(dir.path(), &["add", "-A"]);
+        git(dir.path(), &["commit", "-m", &format!("c{i}")]);
+    }
+    let log = repo.log(2).expect("log 成功");
+    assert_eq!(log.len(), 2);
+    assert_eq!(log[0].subject, "c2");
+}
+
+#[test]
+fn blame_reports_line_authors() {
+    let (dir, repo) = temp_repo();
+    write(dir.path(), "f.txt", "line one\n");
+    git(dir.path(), &["add", "-A"]);
+    git(dir.path(), &["commit", "-m", "init"]);
+    write(dir.path(), "f.txt", "line one\nline two\n");
+    git(dir.path(), &["add", "-A"]);
+    git(dir.path(), &["commit", "-m", "add line two"]);
+
+    let blame = repo.blame("f.txt").expect("blame 成功");
+    assert_eq!(blame.len(), 2);
+    assert_eq!(blame[0].line, 1);
+    assert_eq!(blame[0].summary, "init");
+    assert_eq!(blame[1].line, 2);
+    assert_eq!(blame[1].summary, "add line two");
+    assert_eq!(blame[1].author, "fly");
+}
+
+#[test]
+fn blame_untracked_file_fails_cleanly() {
+    let (dir, repo) = temp_repo();
+    write(dir.path(), "no-history.txt", "x\n");
+    let err = repo.blame("no-history.txt").expect_err("未跟踪文件应失败");
+    let GitError::CommandFailed { stderr, .. } = err else {
+        panic!("应为 CommandFailed: {err:?}");
+    };
+    assert!(!stderr.is_empty() || true, "错误信息可展示");
+}

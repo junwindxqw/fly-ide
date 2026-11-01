@@ -11,17 +11,22 @@
     commitFiles,
     discardFiles,
     loadFileDiff,
+    loadGitBlame,
+    loadGitLog,
     loadGitNumstat,
     loadGitStatus,
     loadGitVersion,
     stageFiles,
     unstageFiles,
+    type BlameLine,
+    type CommitInfo,
     type FileDiff,
     type GitStatus,
     type HunkAction,
     type NumStat,
     type StatusEntry,
   } from "./lib/git";
+  import { blameExtension, blameMapOf } from "./lib/editor/blame";
   import { fsReadText, fsWriteText, pickFolder } from "./lib/fs";
   import {
     ensureMockLsp,
@@ -75,6 +80,14 @@
   let commitNoVerify = $state(false);
   let commitOutput = $state("");
   let committing = $state(false);
+
+  // ---- 历史视图 / blame ----
+  let gitView = $state<"changes" | "history">("changes");
+  let gitLog = $state<CommitInfo[]>([]);
+  let logLoading = $state(false);
+  let logError = $state("");
+  let blameOn = $state(false);
+  let blameLoading = $state(false);
 
   // ---- 编辑器文档状态 ----
   let docs = $state<DocEntry[]>([]);
@@ -319,6 +332,92 @@
   /** 为路径生成 LSP 扩展（会话未就绪时为空）。 */
   function lspExtsFor(path: string): import("@codemirror/state").Extension[] {
     return lspSession ? lspExtensionsFor(lspSession, path, languageIdForPath(path)) : [];
+  }
+
+  // ---- 历史视图 / blame ----
+  async function loadHistory() {
+    if (!workspacePath) {
+      return;
+    }
+    logLoading = true;
+    logError = "";
+    try {
+      gitLog = await loadGitLog(workspacePath, 50);
+    } catch (err) {
+      logError = String(err);
+    } finally {
+      logLoading = false;
+    }
+  }
+
+  $effect(() => {
+    if (gitView === "history" && gitLog.length === 0 && !logLoading && gitStatus) {
+      void loadHistory();
+    }
+  });
+
+  async function showCommitDetail(hash: string) {
+    commitOutput = "";
+    try {
+      const { showCommit } = await import("./lib/git");
+      commitOutput = await showCommit(workspacePath, hash);
+    } catch (err) {
+      commitOutput = String(err);
+    }
+  }
+
+  /** blame 开关：加载当前文档的 blame 并重建 state 附加装饰；关闭时重建移除。 */
+  async function toggleBlame() {
+    if (!activeDoc) {
+      showToast("先打开文件再启用 blame");
+      return;
+    }
+    if (blameOn) {
+      blameOn = false;
+      rebuildActiveDoc();
+      return;
+    }
+    blameLoading = true;
+    try {
+      const lines: BlameLine[] = await loadGitBlame(workspacePath, activePath);
+      const exts = blameExtension(blameMapOf(lines));
+      rebuildActiveDoc(exts);
+      blameOn = true;
+    } catch (err) {
+      showToast(`blame 加载失败：${String(err)}`);
+    } finally {
+      blameLoading = false;
+    }
+  }
+
+  /** 用当前文本重建活动文档的 state（LSP/语法/blame 扩展按需附加）。 */
+  function rebuildActiveDoc(extraBlame: import("@codemirror/state").Extension[] = []) {
+    const doc = docs.find((entry) => entry.path === activePath);
+    if (!doc) {
+      return;
+    }
+    const line = cursorInfo(doc.state).line;
+    docs = docs.map((entry) =>
+      entry.path === activePath
+        ? createDoc(
+            entry.path,
+            {
+              text: entry.state.doc.toString(),
+              encoding: entry.encoding,
+              bom: entry.bom,
+              eol: entry.eol,
+              size: 0,
+              tier: entry.tier,
+              binary: false,
+            },
+            handleDocChanged,
+            line,
+            lspExtsFor(entry.path),
+            [],
+            extraBlame,
+          )
+        : entry,
+    );
   }
 
   /** mock LSP 会话就绪后，为所有已打开文档附加插件（保留当前文本）。 */
@@ -603,7 +702,51 @@
       {#if gitError}
         <p class="git-error">{gitError}</p>
       {:else if gitStatus}
-        <p class="git-meta">
+        <div class="git-tabs">
+          <button
+            type="button"
+            class="git-view-tab"
+            class:git-view-tab-on={gitView === "changes"}
+            onclick={() => (gitView = "changes")}
+          >更改</button>
+          <button
+            type="button"
+            class="git-view-tab"
+            class:git-view-tab-on={gitView === "history"}
+            onclick={() => (gitView = "history")}
+          >历史</button>
+        </div>
+        {#if gitView === "history"}
+          <div class="history-list">
+            {#if logLoading}
+              <div class="git-empty">加载中…</div>
+            {:else if logError}
+              <p class="git-error">{logError}</p>
+            {:else if gitLog.length === 0}
+              <div class="git-empty">暂无提交</div>
+            {:else}
+              {#each gitLog as commit (commit.hash)}
+                <button
+                  type="button"
+                  class="log-row"
+                  title={`${commit.hash}\n${commit.author} · ${commit.date.slice(0, 10)}`}
+                  onclick={() => showCommitDetail(commit.hash)}
+                >
+                  <span class="log-short">{commit.short}</span>
+                  <span class="log-subject" title={commit.subject}>{commit.subject}</span>
+                  {#if commit.refs.length > 0}
+                    <span class="log-refs">{commit.refs.join(", ")}</span>
+                  {/if}
+                  <span class="log-meta">{commit.author} · {commit.date.slice(0, 10)}</span>
+                </button>
+              {/each}
+              {#if commitOutput}
+                <pre class="commit-output">{commitOutput}</pre>
+              {/if}
+            {/if}
+          </div>
+        {:else}
+          <p class="git-meta">
           <span class="git-branch">{gitStatus.branch ?? "HEAD (detached)"}</span>
           {#if gitStatus.ahead !== null || gitStatus.behind !== null}
             <span>↑{gitStatus.ahead ?? 0} ↓{gitStatus.behind ?? 0}</span>
@@ -664,6 +807,7 @@
             {/if}
           </div>
         {/each}
+        {/if}
       {:else}
         <div class="panel-body">输入 git 仓库根目录后加载状态。</div>
       {/if}
@@ -813,6 +957,14 @@
       <span>{activeDoc.encoding}{activeDoc.bom ? " BOM" : ""}</span>
       <span>{activeDoc.eol}</span>
       <span>LSP: {lspSession ? "mock" : "—"}</span>
+      <button
+        type="button"
+        class="blame-toggle"
+        class:blame-toggle-on={blameOn}
+        disabled={blameLoading}
+        title="行内 blame（当前文件）"
+        onclick={() => void toggleBlame()}
+      >{blameLoading ? "blame…" : blameOn ? "blame ✓" : "blame"}</button>
     {:else}
       <span>行 1，列 1</span>
       <span>UTF-8</span>

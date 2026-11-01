@@ -7,7 +7,9 @@
 //! - 子进程封装见 [`process`]，失败统一携带命令与 stderr，不静默吞错；
 //! - 真实仓库的集成测试见 `tests/git_integration.rs`。
 
+mod blame;
 mod error;
+mod log;
 mod numstat;
 mod patch;
 mod process;
@@ -15,7 +17,9 @@ mod repo;
 mod status;
 mod version;
 
+pub use blame::{parse_blame, BlameLine};
 pub use error::GitError;
+pub use log::{parse_log, CommitInfo};
 pub use numstat::{parse_numstat, NumStat};
 pub use patch::{build_patch, parse_patch, FilePatch, PatchHunk};
 pub use repo::{CommitOptions, Repo};

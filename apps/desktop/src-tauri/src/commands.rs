@@ -304,3 +304,77 @@ pub async fn git_commit(
     })
     .await
 }
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitInfoDto {
+    pub hash: String,
+    pub short: String,
+    pub author: String,
+    pub date: String,
+    pub subject: String,
+    pub refs: Vec<String>,
+}
+
+/// 提交历史（默认 50 条）。
+#[tauri::command]
+pub async fn git_log(root: String, limit: Option<usize>) -> Result<Vec<CommitInfoDto>, String> {
+    run_blocking(move || {
+        let repo = repo_of(&root)?;
+        let log = repo
+            .log(limit.unwrap_or(50))
+            .map_err(|err| err.to_string())?;
+        Ok(log
+            .into_iter()
+            .map(|c| CommitInfoDto {
+                hash: c.hash,
+                short: c.short,
+                author: c.author,
+                date: c.date,
+                subject: c.subject,
+                refs: c.refs,
+            })
+            .collect())
+    })
+    .await
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlameLineDto {
+    pub hash: String,
+    pub author: String,
+    pub time: i64,
+    pub summary: String,
+    pub line: u32,
+}
+
+/// 单文件行内 blame。
+#[tauri::command]
+pub async fn git_blame(root: String, path: String) -> Result<Vec<BlameLineDto>, String> {
+    run_blocking(move || {
+        let repo = repo_of(&root)?;
+        let blame = repo.blame(&path).map_err(|err| err.to_string())?;
+        Ok(blame
+            .into_iter()
+            .map(|b| BlameLineDto {
+                hash: b.hash,
+                author: b.author,
+                time: b.time,
+                summary: b.summary,
+                line: b.line,
+            })
+            .collect())
+    })
+    .await
+}
+
+/// 提交的变更摘要（历史详情展示）。
+#[tauri::command]
+pub async fn git_show_commit(root: String, hash: String) -> Result<String, String> {
+    run_blocking(move || {
+        let repo = repo_of(&root)?;
+        repo.show_commit_stat(&hash).map_err(|err| err.to_string())
+    })
+    .await
+}

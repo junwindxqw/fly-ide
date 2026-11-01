@@ -259,4 +259,36 @@ impl Repo {
         }
         Ok(())
     }
+
+    /// 提交历史（默认当前分支，限制条数）。
+    pub fn log(&self, limit: usize) -> Result<Vec<crate::log::CommitInfo>, GitError> {
+        let args = crate::log::log_args(limit);
+        let args: Vec<&str> = args.iter().map(String::as_str).collect();
+        let out = run_git(&self.root, &args)?;
+        Ok(crate::log::parse_log(&String::from_utf8_lossy(&out)))
+    }
+
+    /// 单文件的行内 blame（`git blame --line-porcelain -w`）。
+    pub fn blame(&self, path: &str) -> Result<Vec<crate::blame::BlameLine>, GitError> {
+        let args = crate::blame::blame_args(path);
+        let args: Vec<&str> = args.iter().map(String::as_str).collect();
+        let out = run_git(&self.root, &args)?;
+        Ok(crate::blame::parse_blame(&String::from_utf8_lossy(&out)))
+    }
+
+    /// 提交的变更摘要（`git show --stat --oneline`，供历史详情展示）。
+    pub fn show_commit_stat(&self, hash: &str) -> Result<String, GitError> {
+        let out = run_git(
+            &self.root,
+            &[
+                "show",
+                "--stat",
+                "--oneline",
+                "--no-color",
+                "--no-ext-diff",
+                hash,
+            ],
+        )?;
+        Ok(String::from_utf8_lossy(&out).into_owned())
+    }
 }

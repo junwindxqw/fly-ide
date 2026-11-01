@@ -823,3 +823,96 @@ button.git-row:hover,
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* ---------- Git 面板视图切换 / 历史 / blame ---------- */
+
+.git-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 12px 6px;
+}
+
+.git-view-tab {
+  padding: 3px 10px;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.git-view-tab-on {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+.history-list {
+  overflow: auto;
+  padding: 0 4px;
+}
+
+.log-row {
+  display: block;
+  width: 100%;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+}
+
+.log-row:hover {
+  background: var(--bg-hover);
+}
+
+.log-short {
+  margin-right: 8px;
+  color: var(--accent);
+  font-family: "Cascadia Code", Consolas, monospace;
+}
+
+.log-subject {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.log-refs {
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--bg-active);
+  color: var(--accent);
+  font-size: 10px;
+}
+
+.log-meta {
+  display: block;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.blame-toggle {
+  padding: 0 6px;
+  border: none;
+  border-radius: 3px;
+  background: none;
+  color: var(--text-dim);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.blame-toggle:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.blame-toggle-on {
+  color: var(--accent);
+}
+
+.blame-toggle:disabled {
+  opacity: 0.5;
+}

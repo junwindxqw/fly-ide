@@ -54,6 +54,7 @@ export function createDoc(
   targetLine?: number,
   lspExtensions: import("@codemirror/state").Extension[] = [],
   syntaxExtensions: import("@codemirror/state").Extension[] = [],
+  blameExtensions: import("@codemirror/state").Extension[] = [],
 ): DocEntry {
   const readOnly = file.tier === "readOnlyPlain";
   const lines = file.text.split("\n");
@@ -88,6 +89,7 @@ export function createDoc(
       }),
       ...syntaxExtensions,
       ...lspExtensions,
+      ...blameExtensions,
     ],
   });
   return {

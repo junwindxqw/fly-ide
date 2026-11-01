@@ -106,3 +106,35 @@ export function commitFiles(
 ): Promise<string> {
   return invoke("git_commit", { root, message, options });
 }
+
+export interface CommitInfo {
+  hash: string;
+  short: string;
+  author: string;
+  date: string;
+  subject: string;
+  refs: string[];
+}
+
+export interface BlameLine {
+  hash: string;
+  author: string;
+  time: number;
+  summary: string;
+  line: number;
+}
+
+/** 提交历史。 */
+export function loadGitLog(root: string, limit = 50): Promise<CommitInfo[]> {
+  return invoke("git_log", { root, limit });
+}
+
+/** 单文件行内 blame。 */
+export function loadGitBlame(root: string, path: string): Promise<BlameLine[]> {
+  return invoke("git_blame", { root, path });
+}
+
+/** 提交的变更摘要。 */
+export function showCommit(root: string, hash: string): Promise<string> {
+  return invoke("git_show_commit", { root, hash });
+}
