@@ -51,6 +51,7 @@ export function createDoc(
   file: TextFile,
   onDocChanged: (path: string, state: EditorState) => void,
   targetLine?: number,
+  lspExtensions: import("@codemirror/state").Extension[] = [],
 ): DocEntry {
   const readOnly = file.tier === "readOnlyPlain";
   const lines = file.text.split("\n");
@@ -81,6 +82,7 @@ export function createDoc(
           onDocChanged(path, update.state);
         }
       }),
+      ...lspExtensions,
     ],
   });
   return {

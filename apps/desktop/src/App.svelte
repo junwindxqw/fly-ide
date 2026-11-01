@@ -22,6 +22,12 @@
     type StatusEntry,
   } from "./lib/git";
   import { fsReadText, fsWriteText, pickFolder } from "./lib/fs";
+  import {
+    ensureMockLsp,
+    languageIdForPath,
+    lspExtensionsFor,
+    type MockLspSession,
+  } from "./lib/lsp/lsp";
   import QuickOpen from "./lib/search/QuickOpen.svelte";
   import SearchPanel from "./lib/search/SearchPanel.svelte";
   import { watchStart, watchStop, type FsChangedPayload } from "./lib/search";
@@ -74,11 +80,13 @@
   let activePath = $state("");
   let cursor = $state({ line: 1, col: 1 });
 
-  // ---- 快速打开 / 文件监听 ----
+  // ---- 快速打开 / 文件监听 / LSP ----
   let quickOpenOpen = $state(false);
   let treeVersion = $state(0);
   let gitRefreshTimer: ReturnType<typeof setTimeout> | undefined;
   let unlistenFsChanged: (() => void) | null = null;
+  let lspSession = $state<MockLspSession | null>(null);
+  let lspStarting = false;
 
   const activeDoc = $derived(docs.find((doc) => doc.path === activePath) ?? null);
 
@@ -307,6 +315,43 @@
     }
   }
 
+  /** 为路径生成 LSP 扩展（会话未就绪时为空）。 */
+  function lspExtsFor(path: string): import("@codemirror/state").Extension[] {
+    return lspSession ? lspExtensionsFor(lspSession, path, languageIdForPath(path)) : [];
+  }
+
+  /** mock LSP 会话就绪后，为所有已打开文档附加插件（保留当前文本）。 */
+  async function ensureLspAndAttach() {
+    if (lspSession || lspStarting || !workspacePath) {
+      return;
+    }
+    lspStarting = true;
+    try {
+      const session = await ensureMockLsp(workspacePath);
+      if (!session) {
+        return;
+      }
+      lspSession = session;
+      docs = docs.map((doc) => {
+        const file = {
+          text: doc.state.doc.toString(),
+          encoding: doc.encoding,
+          bom: doc.bom,
+          eol: doc.eol,
+          size: 0,
+          tier: doc.tier,
+          binary: false,
+        };
+        const line = cursorInfo(doc.state).line;
+        return createDoc(doc.path, file, handleDocChanged, line, lspExtsFor(doc.path));
+      });
+    } catch (err) {
+      showToast(`LSP 启动失败：${String(err)}`);
+    } finally {
+      lspStarting = false;
+    }
+  }
+
   async function openTextFile(path: string, targetLine?: number) {
     const existing = docs.find((doc) => doc.path === path);
     if (existing) {
@@ -319,8 +364,9 @@
         showToast("二进制文件，暂不支持查看");
         return;
       }
-      docs = [...docs, createDoc(path, file, handleDocChanged, targetLine)];
+      docs = [...docs, createDoc(path, file, handleDocChanged, targetLine, lspExtsFor(path))];
       activateDoc(path);
+      void ensureLspAndAttach();
     } catch (err) {
       showToast(String(err));
     }
@@ -763,6 +809,7 @@
       <span>行 {cursor.line}，列 {cursor.col}</span>
       <span>{activeDoc.encoding}{activeDoc.bom ? " BOM" : ""}</span>
       <span>{activeDoc.eol}</span>
+      <span>LSP: {lspSession ? "mock" : "—"}</span>
     {:else}
       <span>行 1，列 1</span>
       <span>UTF-8</span>

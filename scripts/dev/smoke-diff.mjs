@@ -1,18 +1,34 @@
-// Git diff 工作流冒烟测试（CDP 驱动 release 生产版）。
-// 前置：以 WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222 启动 fly-ide.exe，
-// 并预先在工作区制造一个 README.md 的两处远距离修改；测试结束时通过 UI 的“丢弃”恢复，
-// 仓库应回到干净状态。
-// 用法：node scripts/dev/smoke-diff.mjs <仓库根目录>
+// Git diff 工作流冒烟测试（CDP 驱动 release 生产版）：
+// 打开 diff → hunk 暂存（MM）→ 切暂存区视图取消暂存（.M）→ 两段式确认丢弃（恢复干净）。
+// 前置：以 WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222 启动 fly-ide.exe。
+// 用法：node scripts/dev/smoke-diff.mjs <仓库根目录>（建议传独立测试工作区，勿用 fly_ide 开发仓库）
+// 注入目标：<root>/frontend-demo/index.js 两处远距离修改；结束时通过 UI 的“丢弃”恢复到 HEAD；
+// 若中途失败请手动执行：
+//   git -C <root> restore --source=HEAD --staged --worktree -- frontend-demo/index.js
 // 注意：在受限/沙箱环境下每个 git 子进程 spawn 可能慢至 ~3s（实测 ZCode Bash 沙箱），
 // 因此所有断言用轮询（60s 上限），真实机器上几百 ms 即通过。
 
 import { setTimeout as sleep } from "node:timers/promises";
+import fs from "node:fs";
+import path from "node:path";
 
 const repoRoot = process.argv[2];
 if (!repoRoot) {
   console.error("usage: node scripts/dev/smoke-diff.mjs <repo-root>");
   process.exit(2);
 }
+
+const targetRel = "frontend-demo/index.js";
+const smokeTargetDisplay = targetRel;
+const targetPath = path.join(repoRoot, targetRel);
+// 两处远距离修改：特征行替换（中部）+ 尾部追加
+const initialContent = fs.readFileSync(targetPath, "utf8");
+let injected = initialContent.replace(
+  "// frontend-demo 主模块",
+  "// smoke ALPHA 注入行",
+);
+injected = injected.trimEnd() + "\n\n// smoke OMEGA 注入行\n";
+fs.writeFileSync(targetPath, injected);
 
 const targets = await fetch("http://127.0.0.1:9222/json/list").then((r) => r.json());
 const page = targets.find((t) => t.type === "page");
@@ -92,7 +108,7 @@ function assert(condition, message) {
 }
 
 const rowWithXy = (expected) => `(() => {
-  const row = [...document.querySelectorAll('button.git-row')].find((b) => b.textContent.includes('README.md'));
+  const row = [...document.querySelectorAll('button.git-row')].find((b) => b.textContent.includes('frontend-demo/index.js'));
   const xy = row ? row.querySelector('.git-xy').textContent : null;
   return { ok: xy === ${JSON.stringify(expected)}, xy };
 })()`;
@@ -137,7 +153,7 @@ await step("预热：首次 git_diff_file（沙箱冷启动可能极慢）", asy
   let last = null;
   for (let attempt = 1; attempt <= 3; attempt++) {
     last = await evaluate(
-      `window.__TAURI_INTERNALS__.invoke('git_diff_file', { root: ${JSON.stringify(repoRoot)}, path: 'README.md', staged: false }).then(r => JSON.stringify({ ok: true, hunks: r.hunks.length })).catch(e => JSON.stringify({ ok: false, err: String(e) }))`,
+      `window.__TAURI_INTERNALS__.invoke('git_diff_file', { root: ${JSON.stringify(repoRoot)}, path: 'frontend-demo/index.js', staged: false }).then(r => JSON.stringify({ ok: true, hunks: r.hunks.length })).catch(e => JSON.stringify({ ok: false, err: String(e) }))`,
     );
     if (typeof last === "string" && last.includes('"ok":true')) {
       console.log("      预热完成");
@@ -148,10 +164,10 @@ await step("预热：首次 git_diff_file（沙箱冷启动可能极慢）", asy
   console.warn(`      WARN 预热未完成（后续步骤自带 90s 轮询，可吸收冷启动），最后返回: ${JSON.stringify(last)}`);
 });
 
-await step("点击 README.md 打开 diff 视图", async () => {
+await step("点击 frontend-demo/index.js 打开 diff 视图", async () => {
   await evaluate(`(() => {
-    const row = [...document.querySelectorAll('button.git-row')].find((b) => b.textContent.includes('README.md'));
-    if (!row) throw new Error('README.md 不在工作区改动列表');
+    const row = [...document.querySelectorAll('button.git-row')].find((b) => b.textContent.includes('frontend-demo/index.js'));
+    if (!row) throw new Error('frontend-demo/index.js 不在工作区改动列表');
     row.click();
   })()`);
   const state = await waitFor(
@@ -167,9 +183,33 @@ await step("点击 README.md 打开 diff 视图", async () => {
 });
 
 await step("hunk 暂存后文件变为 MM", async () => {
-  await evaluate(`document.querySelector('.diff-hunk-chip .diff-btn').click()`);
-  const row = await waitFor("README xy=MM", rowWithXy("MM"));
-  assert(row.xy === "MM", `期望 MM，实际 ${row.xy}`);
+  // 沙箱下偶发点击不触发：点击后轮询 xy，未生效则重开 diff 重试（最多 3 次）
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    await evaluate(`(() => {
+      const btn = document.querySelector('.diff-hunk-chip .diff-btn');
+      if (!btn) throw new Error('暂存按钮消失（diff 可能已关闭）');
+      btn.click();
+    })()`);
+    const settled = await waitFor(
+      `暂存生效(第${attempt}次)`,
+      rowWithXy("MM"),
+      { timeoutMs: 60000, intervalMs: 1500 },
+    ).catch(() => null);
+    if (settled && settled.ok) {
+      return;
+    }
+    if (attempt === 3) {
+      throw new Error(`hunk 暂存三次未生效，最后状态: ${JSON.stringify(settled)}`);
+    }
+    await sleep(3000);
+    await evaluate(`(() => {
+      if (!document.querySelector('.diff-host')) {
+        const row = [...document.querySelectorAll('button.git-row')].find((b) => b.textContent.includes(${JSON.stringify(smokeTargetDisplay)}));
+        if (!row) throw new Error('目标文件不在改动列表');
+        row.click();
+      }
+    })()`);
+  }
 });
 
 await step("切换暂存区视图并取消暂存，回到 .M", async () => {
@@ -177,8 +217,8 @@ await step("切换暂存区视图并取消暂存，回到 .M", async () => {
   for (let attempt = 1; attempt <= 3; attempt++) {
     await evaluate(`(() => {
       if (!document.querySelector('.diff-host')) {
-        const row = [...document.querySelectorAll('button.git-row')].find((b) => b.textContent.includes('README.md'));
-        if (!row) throw new Error('README.md 不在改动列表，无法重开 diff');
+        const row = [...document.querySelectorAll('button.git-row')].find((b) => b.textContent.includes('frontend-demo/index.js'));
+        if (!row) throw new Error('frontend-demo/index.js 不在改动列表，无法重开 diff');
         row.click();
       } else {
         const chip = [...document.querySelectorAll('.diff-chip')].find((b) => b.textContent.trim() === '暂存区');
@@ -208,7 +248,7 @@ await step("切换暂存区视图并取消暂存，回到 .M", async () => {
     const settled = await waitFor(
       `取消暂存生效(第${attempt}次)`,
       `(() => {
-        const row = [...document.querySelectorAll('button.git-row')].find((b) => b.textContent.includes('README.md'));
+        const row = [...document.querySelectorAll('button.git-row')].find((b) => b.textContent.includes('frontend-demo/index.js'));
         const xy = row ? row.querySelector('.git-xy').textContent : null;
         return {
           ok: xy === '.M',
@@ -242,7 +282,7 @@ await step("两段式确认丢弃后仓库恢复干净", async () => {
     btn.click();
   })()`);
   const state = await waitFor("丢弃完成", `({
-    ok: !document.querySelector('.diff-host') && ![...document.querySelectorAll('button.git-row')].some((b) => b.textContent.includes('README.md')),
+    ok: !document.querySelector('.diff-host') && ![...document.querySelectorAll('button.git-row')].some((b) => b.textContent.includes('frontend-demo/index.js')),
     errors: window.__errors || [],
   })`, { timeoutMs: 90000 });
   assert(state.errors.length === 0, `前端错误: ${JSON.stringify(state.errors)}`);

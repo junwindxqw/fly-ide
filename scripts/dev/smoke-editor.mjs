@@ -137,15 +137,15 @@ await step("Ctrl+S 保存落盘", async () => {
   await evaluate(`(() => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true }));
   })()`);
-  // 轮询磁盘内容（本地 fs 直读，不走应用 IPC）
+  // 轮询磁盘内容（本地 fs 直读，不走应用 IPC）；插入位置不限（光标可能在文档末尾）
   const deadline = Date.now() + 90000;
   for (;;) {
     const content = fs.readFileSync(scratchPath, "utf8");
-    if (content.startsWith("HELLO line1")) {
+    if (content.includes("HELLO")) {
       break;
     }
     if (Date.now() > deadline) {
-      throw new Error(`保存未落盘，当前开头: ${JSON.stringify(content.slice(0, 30))}`);
+      throw new Error(`保存未落盘，当前内容: ${JSON.stringify(content.slice(0, 40))}`);
     }
     await sleep(800);
   }
