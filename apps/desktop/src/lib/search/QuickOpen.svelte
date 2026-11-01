@@ -95,6 +95,8 @@
         <div class="quickopen-hint">无匹配文件</div>
       {:else}
         {#each results as match, index (match.path)}
+          <!-- svelte-ignore a11y_mouse_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+          <!-- 鼠标悬停跟随选中是快速打开的刻意交互（同 VS Code），键盘导航由 ↑↓ 提供 -->
           <button
             type="button"
             class="quickopen-item"

@@ -5,6 +5,7 @@
   import DiffViewer from "./lib/editor/DiffViewer.svelte";
   import EditorPane from "./lib/editor/EditorPane.svelte";
   import { cursorInfo, createDoc, isDirty, type DocEntry } from "./lib/editor/doc";
+  import { loadSyntaxFor } from "./lib/editor/syntax";
   import {
     applyHunks,
     commitFiles,
@@ -364,7 +365,9 @@
         showToast("二进制文件，暂不支持查看");
         return;
       }
-      docs = [...docs, createDoc(path, file, handleDocChanged, targetLine, lspExtsFor(path))];
+      // 语法包按需加载（失败降级为纯文本）
+      const syntax = await loadSyntaxFor(path).catch(() => []);
+      docs = [...docs, createDoc(path, file, handleDocChanged, targetLine, lspExtsFor(path), syntax)];
       activateDoc(path);
       void ensureLspAndAttach();
     } catch (err) {

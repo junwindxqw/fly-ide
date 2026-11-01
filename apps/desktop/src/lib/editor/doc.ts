@@ -1,5 +1,6 @@
 import { EditorSelection, EditorState } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
+import { defaultHighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import {
   drawSelection,
@@ -52,6 +53,7 @@ export function createDoc(
   onDocChanged: (path: string, state: EditorState) => void,
   targetLine?: number,
   lspExtensions: import("@codemirror/state").Extension[] = [],
+  syntaxExtensions: import("@codemirror/state").Extension[] = [],
 ): DocEntry {
   const readOnly = file.tier === "readOnlyPlain";
   const lines = file.text.split("\n");
@@ -72,6 +74,8 @@ export function createDoc(
       highlightActiveLineGutter(),
       highlightActiveLine(),
       drawSelection(),
+      // 无此扩展时 Lezer parser 照常运行但不渲染 token span（无高亮样式回退）
+      syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
       editorTheme,
@@ -82,6 +86,7 @@ export function createDoc(
           onDocChanged(path, update.state);
         }
       }),
+      ...syntaxExtensions,
       ...lspExtensions,
     ],
   });
