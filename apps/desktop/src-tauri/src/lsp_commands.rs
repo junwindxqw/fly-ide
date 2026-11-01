@@ -63,6 +63,7 @@ fn mock_handle_message(message: &str, mut emit: impl FnMut(String)) {
                             "textDocumentSync": { "openClose": true, "change": 1 },
                             "completionProvider": { "triggerCharacters": ["."] },
                             "hoverProvider": true,
+                            "documentSymbolProvider": true,
                         },
                         "serverInfo": { "name": "fly-ide-mock-lsp" },
                     },
@@ -92,6 +93,42 @@ fn mock_handle_message(message: &str, mut emit: impl FnMut(String)) {
                 },
             });
             emit(diagnostics.to_string());
+        }
+        "textDocument/documentSymbol" => {
+            if let Some(id) = id {
+                let response = serde_json::json!({
+                    "id": id,
+                    "result": [
+                        {
+                            "name": "main",
+                            "kind": 12,
+                            "range": {
+                                "start": { "line": 0, "character": 0 },
+                                "end": { "line": 10, "character": 0 },
+                            },
+                            "selectionRange": {
+                                "start": { "line": 0, "character": 4 },
+                                "end": { "line": 0, "character": 8 },
+                            },
+                            "detail": "fn",
+                        },
+                        {
+                            "name": "MOCK_SYMBOL_CONST",
+                            "kind": 13,
+                            "range": {
+                                "start": { "line": 3, "character": 0 },
+                                "end": { "line": 3, "character": 20 },
+                            },
+                            "selectionRange": {
+                                "start": { "line": 3, "character": 6 },
+                                "end": { "line": 3, "character": 23 },
+                            },
+                            "detail": "const",
+                        },
+                    ],
+                });
+                emit(response.to_string());
+            }
         }
         "textDocument/completion" => {
             if let Some(id) = id {

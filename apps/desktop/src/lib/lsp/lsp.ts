@@ -7,6 +7,7 @@ import {
   type Transport,
 } from "@codemirror/lsp-client";
 import type { Extension } from "@codemirror/state";
+import { interceptLspMessage } from "./diagnostics.svelte";
 
 /** LSP 链路 glue：Rust 进程宿主 ↔ 事件桥 ↔ @codemirror/lsp-client。
  *  协议语义全部由官方客户端处理（ADR-0002），本模块只提供 Transport
@@ -27,6 +28,8 @@ export async function createTransport(serverId: string): Promise<Transport> {
   let handler: ((value: string) => void) | null = null;
   const unlisten = await listen<string>(`lsp-message:${serverId}`, (event) => {
     const message = event.payload as string;
+    // 拦截 publishDiagnostics 写入诊断状态（Problems 面板数据源）
+    interceptLspMessage(message);
     if (handler) {
       handler(message);
     } else {

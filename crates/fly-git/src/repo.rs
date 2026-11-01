@@ -291,4 +291,22 @@ impl Repo {
         )?;
         Ok(String::from_utf8_lossy(&out).into_owned())
     }
+
+    /// fetch（`git fetch --all`，凭据由 Git Credential Manager 处理）。
+    pub fn fetch(&self) -> Result<String, GitError> {
+        let out = run_git(&self.root, &["fetch", "--all"])?;
+        Ok(String::from_utf8_lossy(&out).into_owned())
+    }
+
+    /// pull（`git pull`，凭据由 Git Credential Manager 处理）。
+    pub fn pull(&self) -> Result<String, GitError> {
+        let out = run_git(&self.root, &["pull"])?;
+        Ok(String::from_utf8_lossy(&out).into_owned())
+    }
+
+    /// push（`git push`，凭据由 Git Credential Manager 处理）。
+    pub fn push(&self) -> Result<String, GitError> {
+        let out = run_git(&self.root, &["push"])?;
+        Ok(String::from_utf8_lossy(&out).into_owned())
+    }
 }

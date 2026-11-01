@@ -378,3 +378,28 @@ pub async fn git_show_commit(root: String, hash: String) -> Result<String, Strin
     })
     .await
 }
+
+/// 网络操作（fetch/pull/push），凭据由 Git Credential Manager 处理。
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum NetworkAction {
+    Fetch,
+    Pull,
+    Push,
+}
+
+#[tauri::command]
+pub async fn git_network(root: String, action: NetworkAction) -> Result<String, String> {
+    use fly_git::Repo;
+    run_blocking(move || {
+        let repo =
+            Repo::discover(Path::new(&root)).ok_or_else(|| format!("目录不是 git 仓库：{root}"))?;
+        let result = match action {
+            NetworkAction::Fetch => repo.fetch(),
+            NetworkAction::Pull => repo.pull(),
+            NetworkAction::Push => repo.push(),
+        };
+        result.map_err(|err| err.to_string())
+    })
+    .await
+}

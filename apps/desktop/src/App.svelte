@@ -27,11 +27,18 @@
     type StatusEntry,
   } from "./lib/git";
   import { blameExtension, blameMapOf } from "./lib/editor/blame";
+  import {
+    allDiagnostics,
+    getOutline,
+    requestOutline,
+    type DiagnosticEntry,
+  } from "./lib/lsp/diagnostics.svelte";
   import { fsReadText, fsWriteText, pickFolder } from "./lib/fs";
   import {
     ensureMockLsp,
     languageIdForPath,
     lspExtensionsFor,
+    pathToFileUri,
     type MockLspSession,
   } from "./lib/lsp/lsp";
   import QuickOpen from "./lib/search/QuickOpen.svelte";
@@ -39,12 +46,13 @@
   import { watchStart, watchStop, type FsChangedPayload } from "./lib/search";
   import FileTree from "./lib/workspace/FileTree.svelte";
 
-  type PanelId = "explorer" | "search" | "git" | "settings";
+  type PanelId = "explorer" | "search" | "git" | "outline" | "settings";
 
   const panels: { id: PanelId; label: string; title: string }[] = [
     { id: "explorer", label: "文件", title: "资源管理器" },
     { id: "search", label: "搜索", title: "全局搜索" },
     { id: "git", label: "Git", title: "源代码管理" },
+    { id: "outline", label: "大纲", title: "大纲" },
     { id: "settings", label: "设置", title: "设置" },
   ];
 
@@ -88,6 +96,31 @@
   let logError = $state("");
   let blameOn = $state(false);
   let blameLoading = $state(false);
+
+  // ---- Problems / Outline 面板 ----
+  let bottomPanelOpen = $state(false);
+  let diagnosticsVersion = $state(0);
+  let outlineVersion = $state(0);
+
+  /** 诊断按 URI 分组（含计数）。 */
+  const problemsGroups = $derived.by(() => {
+    void diagnosticsVersion; // 诊断变化时重算
+    return allDiagnostics().filter((group) => group.entries.length > 0);
+  });
+
+  const problemsCount = $derived.by(() => {
+    void diagnosticsVersion;
+    return problemsGroups.reduce((sum, group) => sum + group.entries.length, 0);
+  });
+
+  /** 从 file URI 还原磁盘路径并打开定位。 */
+  async function openProblemFile(uri: string, line: number) {
+    let path = decodeURIComponent(uri.replace(/^file:\/\//, ""));
+    if (/^[A-Za-z]:/.test(path)) {
+      path = path.replace(/\//g, "\\");
+    }
+    await openTextFile(path, line);
+  }
 
   // ---- 编辑器文档状态 ----
   let docs = $state<DocEntry[]>([]);
@@ -445,6 +478,11 @@
         const line = cursorInfo(doc.state).line;
         return createDoc(doc.path, file, handleDocChanged, line, lspExtsFor(doc.path));
       });
+      // 为已打开文档请求大纲
+      const { pathToFileUri: toUri } = await import("./lib/lsp/lsp");
+      for (const doc of docs) {
+        void requestOutline(session.client, toUri(doc.path)).catch(() => {});
+      }
     } catch (err) {
       showToast(`LSP 启动失败：${String(err)}`);
     } finally {
@@ -468,7 +506,12 @@
       const syntax = await loadSyntaxFor(path).catch(() => []);
       docs = [...docs, createDoc(path, file, handleDocChanged, targetLine, lspExtsFor(path), syntax)];
       activateDoc(path);
-      void ensureLspAndAttach();
+      // 先等会话就绪（内部会为所有已打开文档请求大纲，含当前文件）
+      await ensureLspAndAttach();
+      if (lspSession) {
+        const { pathToFileUri: toUri } = await import("./lib/lsp/lsp");
+        void requestOutline(lspSession.client, toUri(path)).catch(() => {});
+      }
     } catch (err) {
       showToast(String(err));
     }
@@ -550,6 +593,7 @@
     if (paths.length === 0) {
       return;
     }
+    diagnosticsVersion += 1; // 重新计算问题计数
     void (async () => {
       let notified = false;
       for (const doc of docs) {
@@ -811,6 +855,32 @@
       {:else}
         <div class="panel-body">输入 git 仓库根目录后加载状态。</div>
       {/if}
+    {:else if activePanel === "outline"}
+      <div class="outline-panel">
+        {#if !lspSession}
+          <div class="git-empty">大纲需要 LSP 会话（打开文件后自动建立）</div>
+        {:else if activeDoc}
+          {@const symbols = getOutline(pathToFileUri(activeDoc.path))}
+          {#if symbols.length === 0}
+            <div class="git-empty">当前文件无符号</div>
+          {:else}
+            {#each symbols as sym, index (index)}
+              <button
+                type="button"
+                class="outline-row"
+                title={`${sym.name} · 行 ${sym.line + 1}`}
+                onclick={() => openTextFile(activePath, sym.line + 1)}
+              >
+                <span class="outline-kind">{sym.kind}</span>
+                <span class="outline-name">{sym.name}</span>
+                <span class="outline-line">{sym.line + 1}</span>
+              </button>
+            {/each}
+          {/if}
+        {:else}
+          <div class="git-empty">当前文件无符号</div>
+        {/if}
+      </div>
     {:else}
       <div class="panel-body">设置面板（后续实现）。</div>
     {/if}
@@ -950,7 +1020,13 @@
 
   <footer class="statusbar">
     <span>分支: {gitStatus?.branch ?? "—"}</span>
-    <span>问题: 0</span>
+    <button
+      type="button"
+      class="problems-toggle"
+      class:problems-toggle-on={bottomPanelOpen}
+      title="问题面板（诊断）"
+      onclick={() => (bottomPanelOpen = !bottomPanelOpen)}
+    >问题: {problemsCount}</button>
     <span class="spacer"></span>
     {#if activeDoc}
       <span>行 {cursor.line}，列 {cursor.col}</span>
@@ -971,6 +1047,36 @@
       <span>LF</span>
     {/if}
   </footer>
+
+  {#if bottomPanelOpen}
+    <section class="problems-panel" aria-label="问题面板">
+      {#if problemsGroups.length === 0}
+        <div class="problems-empty">没有诊断问题</div>
+      {:else}
+        {#each problemsGroups as group (group.uri)}
+          <div class="problems-group">
+            <div class="problems-file" title={group.uri}>
+              {decodeURIComponent(group.uri.replace(/^file:\/\//, "")).replace(/\//g, "\\")}（{group.entries.length}）
+            </div>
+            {#each group.entries as entry, index (index)}
+              <button
+                type="button"
+                class="problems-row"
+                title={entry.message}
+                onclick={() => openProblemFile(group.uri, entry.line + 1)}
+              >
+                <span class="problems-sev" class:problems-sev-error={entry.severity === 1}>
+                  {entry.severity === 1 ? "✗" : entry.severity === 2 ? "⚠" : "ℹ"}
+                </span>
+                <span class="problems-loc">{entry.line + 1}:{entry.col + 1}</span>
+                <span class="problems-msg">{entry.message}</span>
+              </button>
+            {/each}
+          </div>
+        {/each}
+      {/if}
+    </section>
+  {/if}
 
   {#if toast}
     <div class="toast">{toast}</div>
