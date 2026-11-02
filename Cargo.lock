@@ -851,6 +851,7 @@ dependencies = [
 name = "fly-git"
 version = "0.1.0"
 dependencies = [
+ "serde",
  "tempfile",
  "thiserror 2.0.21",
 ]
@@ -901,6 +902,10 @@ dependencies = [
 [[package]]
 name = "fly-workspace"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "fnv"

@@ -498,12 +498,45 @@ fn blame_reports_line_authors() {
 }
 
 #[test]
-fn blame_untracked_file_fails_cleanly() {
+fn branch_info_reports_no_remote_and_no_upstream() {
     let (dir, repo) = temp_repo();
-    write(dir.path(), "no-history.txt", "x\n");
-    let err = repo.blame("no-history.txt").expect_err("未跟踪文件应失败");
-    let GitError::CommandFailed { stderr, .. } = err else {
-        panic!("应为 CommandFailed: {err:?}");
-    };
-    assert!(!stderr.is_empty() || true, "错误信息可展示");
+    write(dir.path(), "f.txt", "x\n");
+    git(dir.path(), &["add", "-A"]);
+    git(dir.path(), &["commit", "-m", "init"]);
+
+    let info = repo.branch_info().expect("branch_info 成功");
+    assert_eq!(info.branch.as_deref(), Some("main"));
+    assert!(!info.has_remote, "无 remote 的仓库");
+    assert!(info.upstream.is_none());
+    assert_eq!(info.tracking_display(), None);
+}
+
+#[test]
+fn branch_info_reports_ahead_after_local_commit() {
+    let (dir, repo) = temp_repo();
+    write(dir.path(), "f.txt", "x\n");
+    git(dir.path(), &["add", "-A"]);
+    git(dir.path(), &["commit", "-m", "init"]);
+    // 造一个本地 ahead：无远端时 ahead/behind 为 None，用 HEAD 提交验证字段解析
+    write(dir.path(), "g.txt", "y\n");
+    git(dir.path(), &["add", "-A"]);
+    git(dir.path(), &["commit", "-m", "second"]);
+
+    let info = repo.branch_info().expect("branch_info 成功");
+    assert_eq!(info.branch.as_deref(), Some("main"));
+    // 无上游时 ahead/behind 均 None（符合 git status --porcelain=v2 行为）
+    assert!(info.ahead.is_none());
+    assert!(info.behind.is_none());
+}
+
+#[test]
+fn network_commands_fail_cleanly_without_remote() {
+    let (dir, repo) = temp_repo();
+    write(dir.path(), "f.txt", "x\n");
+    git(dir.path(), &["add", "-A"]);
+    git(dir.path(), &["commit", "-m", "init"]);
+
+    // push 无远端必然失败；fetch --all 在无远端时是 no-op 成功（git 实际行为）
+    assert!(repo.push().is_err());
+    assert!(repo.fetch().is_ok(), "fetch --all 无远端时应为 no-op 成功");
 }

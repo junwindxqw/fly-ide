@@ -8,6 +8,7 @@
 //! - 真实仓库的集成测试见 `tests/git_integration.rs`。
 
 mod blame;
+mod branch;
 mod error;
 mod log;
 mod numstat;
@@ -18,6 +19,7 @@ mod status;
 mod version;
 
 pub use blame::{parse_blame, BlameLine};
+pub use branch::BranchInfo;
 pub use error::GitError;
 pub use log::{parse_log, CommitInfo};
 pub use numstat::{parse_numstat, NumStat};

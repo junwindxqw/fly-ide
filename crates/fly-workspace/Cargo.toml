@@ -8,3 +8,5 @@ repository.workspace = true
 description = "工作区打开、文件树懒加载、最近项目、会话、文件索引"
 
 [dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }

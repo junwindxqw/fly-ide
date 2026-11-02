@@ -309,4 +309,19 @@ impl Repo {
         let out = run_git(&self.root, &["push"])?;
         Ok(String::from_utf8_lossy(&out).into_owned())
     }
+
+    /// 分支跟踪信息（当前分支、上游、领先/落后）。
+    pub fn branch_info(&self) -> Result<crate::branch::BranchInfo, GitError> {
+        let status = self.status()?;
+        // 远程仓库检测：有 remote 记录
+        let remotes = run_git(&self.root, &["remote"])?;
+        let has_remote = !String::from_utf8_lossy(&remotes).trim().is_empty();
+        Ok(crate::branch::BranchInfo::new(
+            status.branch,
+            status.upstream,
+            status.ahead,
+            status.behind,
+            has_remote,
+        ))
+    }
 }

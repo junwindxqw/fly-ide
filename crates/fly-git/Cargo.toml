@@ -9,6 +9,7 @@ description = "Git 集成：status/diff/log/blame 解析、patch 生成与应用
 
 [dependencies]
 thiserror = { workspace = true }
+serde = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"

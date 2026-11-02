@@ -107,6 +107,27 @@ export function commitFiles(
   return invoke("git_commit", { root, message, options });
 }
 
+export interface BranchInfo {
+  branch: string | null;
+  upstream: string | null;
+  ahead: number | null;
+  behind: number | null;
+  hasRemote: boolean;
+}
+
+/** 分支跟踪信息。 */
+export function loadBranchInfo(root: string): Promise<BranchInfo> {
+  return invoke("git_branch_info", { root });
+}
+
+/** 远程操作。 */
+export function gitNetwork(
+  root: string,
+  action: "fetch" | "pull" | "push",
+): Promise<string> {
+  return invoke("git_network", { root, action });
+}
+
 export interface CommitInfo {
   hash: string;
   short: string;

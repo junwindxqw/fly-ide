@@ -10,6 +10,8 @@
     applyHunks,
     commitFiles,
     discardFiles,
+    gitNetwork,
+    loadBranchInfo,
     loadFileDiff,
     loadGitBlame,
     loadGitLog,
@@ -19,6 +21,7 @@
     stageFiles,
     unstageFiles,
     type BlameLine,
+    type BranchInfo,
     type CommitInfo,
     type FileDiff,
     type GitStatus,
@@ -43,6 +46,7 @@
   } from "./lib/lsp/lsp";
   import QuickOpen from "./lib/search/QuickOpen.svelte";
   import SearchPanel from "./lib/search/SearchPanel.svelte";
+  import SettingsPanel from "./lib/settings/SettingsPanel.svelte";
   import { watchStart, watchStop, type FsChangedPayload } from "./lib/search";
   import FileTree from "./lib/workspace/FileTree.svelte";
 
@@ -97,6 +101,11 @@
   let blameOn = $state(false);
   let blameLoading = $state(false);
 
+  // ---- 远程操作 ----
+  let branchInfo = $state<BranchInfo | null>(null);
+  let netRunning = $state(false);
+  let netOutput = $state("");
+
   // ---- Problems / Outline 面板 ----
   let bottomPanelOpen = $state(false);
   let diagnosticsVersion = $state(0);
@@ -111,6 +120,15 @@
   const problemsCount = $derived.by(() => {
     void diagnosticsVersion;
     return problemsGroups.reduce((sum, group) => sum + group.entries.length, 0);
+  });
+
+  /** 分支跟踪展示（↑ahead ↓behind）。 */
+  const trackingDisplay = $derived.by(() => {
+    const info = branchInfo;
+    if (!info || (info.ahead === null && info.behind === null)) {
+      return null;
+    }
+    return `↑${info.ahead ?? 0} ↓${info.behind ?? 0}`;
   });
 
   /** 从 file URI 还原磁盘路径并打开定位。 */
@@ -250,11 +268,28 @@
       if (!gitVersion) {
         gitVersion = await loadGitVersion().catch(() => "");
       }
+      // 分支跟踪信息（无远端时字段为 null，不影响主流程）
+      branchInfo = await loadBranchInfo(root).catch(() => null);
     } catch (err) {
       gitStatus = null;
       gitError = String(err);
     } finally {
       gitLoading = false;
+    }
+  }
+
+  /** fetch/pull/push（输出展示，凭据由 Git Credential Manager 处理）。 */
+  async function runNetwork(action: "fetch" | "pull" | "push") {
+    netRunning = true;
+    netOutput = "";
+    try {
+      netOutput = await gitNetwork(workspacePath, action);
+      showToast(`${action} 完成`);
+      await refreshGit();
+    } catch (err) {
+      netOutput = String(err);
+    } finally {
+      netRunning = false;
     }
   }
 
@@ -760,6 +795,22 @@
             onclick={() => (gitView = "history")}
           >历史</button>
         </div>
+        {#if gitView === "changes"}
+          <div class="net-toolbar">
+            <button type="button" class="net-btn" disabled={netRunning || !branchInfo?.hasRemote} onclick={() => void runNetwork("fetch")}>
+              {netRunning ? "…" : "fetch"}
+            </button>
+            <button type="button" class="net-btn" disabled={netRunning || !branchInfo?.hasRemote} onclick={() => void runNetwork("pull")}>
+              {netRunning ? "…" : "pull"}
+            </button>
+            <button type="button" class="net-btn" disabled={netRunning || !branchInfo?.hasRemote} onclick={() => void runNetwork("push")}>
+              {netRunning ? "…" : "push"}
+            </button>
+          </div>
+          {#if netOutput}
+            <pre class="net-output">{netOutput}</pre>
+          {/if}
+        {/if}
         {#if gitView === "history"}
           <div class="history-list">
             {#if logLoading}
@@ -792,8 +843,13 @@
         {:else}
           <p class="git-meta">
           <span class="git-branch">{gitStatus.branch ?? "HEAD (detached)"}</span>
-          {#if gitStatus.ahead !== null || gitStatus.behind !== null}
+          {#if trackingDisplay}
+            <span title={`上游: ${branchInfo?.upstream ?? "无"}`}>{trackingDisplay}</span>
+          {:else if gitStatus.ahead !== null || gitStatus.behind !== null}
             <span>↑{gitStatus.ahead ?? 0} ↓{gitStatus.behind ?? 0}</span>
+          {/if}
+          {#if branchInfo?.hasRemote}
+            <span class="git-remote" title="已配置远程仓库">●</span>
           {/if}
           {#if gitVersion}<span class="git-ver">git {gitVersion}</span>{/if}
         </p>
@@ -881,6 +937,8 @@
           <div class="git-empty">当前文件无符号</div>
         {/if}
       </div>
+    {:else if activePanel === "settings"}
+      <SettingsPanel />
     {:else}
       <div class="panel-body">设置面板（后续实现）。</div>
     {/if}
@@ -1019,7 +1077,7 @@
   </main>
 
   <footer class="statusbar">
-    <span>分支: {gitStatus?.branch ?? "—"}</span>
+    <span>分支: {gitStatus?.branch ?? "—"}{trackingDisplay ? ` ${trackingDisplay}` : ""}</span>
     <button
       type="button"
       class="problems-toggle"

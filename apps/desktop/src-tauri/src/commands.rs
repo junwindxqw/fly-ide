@@ -403,3 +403,32 @@ pub async fn git_network(root: String, action: NetworkAction) -> Result<String, 
     })
     .await
 }
+
+/// 分支跟踪信息（当前分支、上游、领先/落后）。
+#[tauri::command]
+pub async fn git_branch_info(root: String) -> Result<BranchInfoDto, String> {
+    use fly_git::Repo;
+    run_blocking(move || {
+        let repo =
+            Repo::discover(Path::new(&root)).ok_or_else(|| format!("目录不是 git 仓库：{root}"))?;
+        let info = repo.branch_info().map_err(|err| err.to_string())?;
+        Ok(BranchInfoDto {
+            branch: info.branch,
+            upstream: info.upstream,
+            ahead: info.ahead,
+            behind: info.behind,
+            has_remote: info.has_remote,
+        })
+    })
+    .await
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchInfoDto {
+    pub branch: Option<String>,
+    pub upstream: Option<String>,
+    pub ahead: Option<u32>,
+    pub behind: Option<u32>,
+    pub has_remote: bool,
+}

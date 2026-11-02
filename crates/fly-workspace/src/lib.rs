@@ -2,8 +2,12 @@
 
 //! 工作区打开、文件树懒加载、最近项目、会话、文件索引。
 
+pub mod settings;
+
 use std::fs;
 use std::path::Path;
+
+pub use settings::{Settings, SettingsStore};
 
 /// 遍历/搜索时默认排除的目录名。
 pub const DEFAULT_EXCLUDES: &[&str] =

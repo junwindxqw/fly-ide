@@ -7,6 +7,7 @@ mod commands;
 mod fs_commands;
 mod lsp_commands;
 mod search_commands;
+mod settings_commands;
 mod watch_commands;
 
 use fly_core::trace;
@@ -41,6 +42,12 @@ pub fn run() {
         .manage(search_commands::SearchState::new())
         .manage(watch_commands::WatchState::new())
         .manage(lsp_commands::LspState::new())
+        .manage(settings_commands::SettingsState(
+            fly_workspace::SettingsStore::load().unwrap_or_else(|_| {
+                // 加载失败（如 APPDATA 缺失）时回退到仅内存的默认设置
+                fly_workspace::SettingsStore::new_in_memory()
+            }),
+        ))
         .invoke_handler(tauri::generate_handler![
             greet,
             app_info,
@@ -58,6 +65,7 @@ pub fn run() {
             commands::git_blame,
             commands::git_show_commit,
             commands::git_network,
+            commands::git_branch_info,
             fs_commands::fs_read_text,
             fs_commands::fs_write_text,
             fs_commands::fs_list_dir,
@@ -69,7 +77,9 @@ pub fn run() {
             watch_commands::watch_stop,
             lsp_commands::lsp_start,
             lsp_commands::lsp_send,
-            lsp_commands::lsp_stop
+            lsp_commands::lsp_stop,
+            settings_commands::settings_get,
+            settings_commands::settings_update
         ])
         .setup(|app| {
             trace::mark("tauri.setup.begin");

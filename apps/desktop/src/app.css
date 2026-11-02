@@ -1047,3 +1047,139 @@ button.git-row:hover,
   color: var(--text-dim);
   font-size: 11px;
 }
+
+/* ---------- Git 远程操作 ---------- */
+
+.net-toolbar {
+  display: flex;
+  gap: 4px;
+  padding: 0 12px 6px;
+}
+
+.net-btn {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-editor);
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.net-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.net-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.net-output {
+  max-height: 140px;
+  margin: 0 12px 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-editor);
+  color: var(--text-dim);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.git-remote {
+  margin-left: auto;
+  color: #7ec96f;
+  font-size: 9px;
+}
+
+/* ---------- 设置面板 ---------- */
+
+.settings-panel {
+  overflow: auto;
+  padding: 4px 12px 12px;
+}
+
+.settings-group {
+  margin-bottom: 14px;
+}
+
+.settings-group h3 {
+  margin: 8px 0 6px;
+  color: var(--text-dim);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 12px;
+}
+
+.settings-row > span:first-child {
+  flex: none;
+  width: 64px;
+  color: var(--text-dim);
+}
+
+.settings-row input,
+.settings-row select {
+  min-width: 0;
+  flex: 1;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-editor);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.settings-row input:focus,
+.settings-row select:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.settings-check {
+  gap: 6px;
+}
+
+.settings-check input {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+}
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.settings-save {
+  padding: 4px 16px;
+  border: none;
+  border-radius: 5px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+}
+
+.settings-save:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.settings-toast {
+  color: #7ec96f;
+  font-size: 11px;
+}
