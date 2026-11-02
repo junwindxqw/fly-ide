@@ -265,3 +265,57 @@ pub async fn lsp_stop(app: tauri::AppHandle, id: String) -> Result<(), String> {
     })
     .await
 }
+
+/// 语言包服务器状态（供语言服务器管理面板展示）。
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerStatusDto {
+    pub id: String,
+    pub name: String,
+    pub command: String,
+    pub args: Vec<String>,
+    pub extensions: Vec<String>,
+    pub runtime_hint: Option<String>,
+    /// available(path) / installable / missing。
+    pub availability: String,
+    pub available_path: Option<String>,
+    /// 当前是否有运行中的会话。
+    pub running: bool,
+}
+
+/// 列出所有内置语言包的服务器状态。
+#[tauri::command]
+pub async fn lsp_server_status(app: tauri::AppHandle) -> Result<Vec<ServerStatusDto>, String> {
+    let state = app.state::<LspState>();
+    let running_ids: Vec<String> = state
+        .0
+        .lock()
+        .expect("lsp state 锁")
+        .keys()
+        .cloned()
+        .collect();
+    let packs = fly_lsp_host::builtin_packs();
+    Ok(packs
+        .into_iter()
+        .map(|pack| {
+            let (availability, available_path) = match fly_lsp_host::detect_server(&pack) {
+                fly_lsp_host::ServerAvailability::Available(path) => {
+                    ("available".to_string(), Some(path))
+                }
+                fly_lsp_host::ServerAvailability::Installable => ("installable".to_string(), None),
+                fly_lsp_host::ServerAvailability::Missing => ("missing".to_string(), None),
+            };
+            ServerStatusDto {
+                id: pack.id.clone(),
+                name: pack.name,
+                command: pack.server.command,
+                args: pack.server.args,
+                extensions: pack.extensions,
+                runtime_hint: pack.server.runtime_hint,
+                availability,
+                available_path,
+                running: running_ids.iter().any(|id| id.starts_with(&pack.id)),
+            }
+        })
+        .collect())
+}

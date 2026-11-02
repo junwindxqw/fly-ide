@@ -64,6 +64,24 @@ export async function createTransport(serverId: string): Promise<Transport> {
 export const MOCK_SERVER_COMMAND = "@mock";
 export const MOCK_SERVER_ARGS: string[] = [];
 
+/** 语言服务器状态（lsp_server_status DTO）。 */
+export interface ServerStatus {
+  id: string;
+  name: string;
+  command: string;
+  args: string[];
+  extensions: string[];
+  runtimeHint: string | null;
+  availability: "available" | "installable" | "missing";
+  availablePath: string | null;
+  running: boolean;
+}
+
+/** 列出内置语言包的服务器状态。 */
+export function listServerStatus(): Promise<ServerStatus[]> {
+  return invoke("lsp_server_status");
+}
+
 export interface MockLspSession {
   serverId: string;
   client: LSPClient;

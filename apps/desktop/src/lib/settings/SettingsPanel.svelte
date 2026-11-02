@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { getSettings, updateSettings, type Settings } from "../settings";
+  import { listServerStatus, type ServerStatus } from "../lsp/lsp";
 
   let {
     onClose,
@@ -12,6 +13,7 @@
   let saving = $state(false);
   let error = $state("");
   let toast = $state("");
+  let servers = $state<ServerStatus[]>([]);
 
   const themes = [
     { value: "dark", label: "深色" },
@@ -21,6 +23,7 @@
 
   onMount(() => {
     void load();
+    void loadServers();
   });
 
   async function load() {
@@ -29,6 +32,25 @@
       settings = await getSettings();
     } catch (err) {
       error = String(err);
+    }
+  }
+
+  async function loadServers() {
+    try {
+      servers = await listServerStatus();
+    } catch {
+      // 语言服务器状态加载失败不影响设置主流程
+    }
+  }
+
+  function availabilityLabel(server: ServerStatus): string {
+    switch (server.availability) {
+      case "available":
+        return "已安装";
+      case "installable":
+        return "可下载安装";
+      default:
+        return "未安装";
     }
   }
 
@@ -105,4 +127,25 @@
       {/if}
     </div>
   {/if}
+
+  <section class="settings-group">
+    <h3>语言服务器</h3>
+    {#if servers.length === 0}
+      <div class="git-empty">加载中…</div>
+    {:else}
+      {#each servers as server (server.id)}
+        <div class="server-row">
+          <span class="server-name">{server.name}</span>
+          <span class="server-cmd" title={server.availablePath ?? server.command}>{server.command}</span>
+          <span class="server-avail" class:server-avail-ok={server.availability === "available"}>
+            {availabilityLabel(server)}
+          </span>
+          {#if server.runtimeHint}
+            <span class="server-hint">{server.runtimeHint}</span>
+          {/if}
+        </div>
+      {/each}
+      <p class="server-note">服务器按需启动；未安装的语言会降级为纯语法高亮（编辑/查找不受影响）。</p>
+    {/if}
+  </section>
 </div>

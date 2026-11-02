@@ -78,6 +78,7 @@ pub fn run() {
             lsp_commands::lsp_start,
             lsp_commands::lsp_send,
             lsp_commands::lsp_stop,
+            lsp_commands::lsp_server_status,
             settings_commands::settings_get,
             settings_commands::settings_update
         ])

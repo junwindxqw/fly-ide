@@ -7,6 +7,8 @@
 //! `lsp-stderr:{id}`、`lsp-exit:{id}`。
 
 pub mod framing;
+pub mod installer;
+pub mod packs;
 
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -16,6 +18,13 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 
 pub use framing::{read_message, write_message};
+pub use installer::{
+    download_verified, extract_zip, install_server, servers_dir, sha256_of_file, InstallError,
+};
+pub use packs::{
+    builtin_packs, detect_server, find_pack, pack_for_extension, which, InstallSpec, LanguagePack,
+    ServerAvailability, ServerSpec,
+};
 
 /// 一次语言服务器会话。Clone 共享底层句柄；所有会话结束后进程退出。
 #[derive(Clone)]

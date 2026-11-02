@@ -1183,3 +1183,53 @@ button.git-row:hover,
   color: #7ec96f;
   font-size: 11px;
 }
+
+/* ---------- 语言服务器状态 ---------- */
+
+.server-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 12px;
+}
+
+.server-name {
+  flex: none;
+  width: 130px;
+  color: var(--text);
+}
+
+.server-cmd {
+  flex: 1;
+  min-width: 120px;
+  color: var(--text-dim);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.server-avail {
+  flex: none;
+  color: #e0a75e;
+  font-size: 11px;
+}
+
+.server-avail-ok {
+  color: #7ec96f;
+}
+
+.server-hint {
+  flex-basis: 100%;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.server-note {
+  margin: 6px 0 0;
+  color: var(--text-dim);
+  font-size: 11px;
+}
